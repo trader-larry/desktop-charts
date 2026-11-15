@@ -317,7 +317,7 @@ export class DemoFeed {
     const now = Math.floor(Date.now() / 1000);
     const end = Math.floor(now / tf.sec) * tf.sec;
     const daily = tf.sec >= 86400;
-    const maxBars = daily ? 1500 : 6000;
+    const maxBars = daily ? 1500 : 12000;
     const start = Math.max(end - tf.lookbackDays * 86400, end - maxBars * tf.sec * (info.kind === 'equity' ? 4 : 1.4));
     const vol = (info.kind === 'crypto' ? 0.022 : info.kind === 'future' ? 0.011 : 0.016) * Math.sqrt(tf.sec / 86400 * (daily ? 1 : 3.5));
     const baseVol = info.kind === 'future' ? 2500 : info.kind === 'crypto' ? 40 : 90000;

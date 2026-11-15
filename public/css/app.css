@@ -194,3 +194,49 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 .wl-ext.detail { display: flex; gap: 8px; font-size: 12px; margin: 2px 0 4px; }
 .legend .l-desc { color: var(--muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #panes.multi .legend .l-desc { max-width: 160px; }
+.wl-list-btn { display: flex; align-items: center; gap: 4px; background: none; border: 0; color: var(--text); font: inherit; font-weight: 600; padding: 3px 6px; margin-left: -6px; border-radius: 4px; cursor: pointer; max-width: 170px; }
+.wl-list-btn:hover { background: var(--hover); }
+#wlName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-list-btn .caret { color: var(--muted); font-size: 10px; }
+#wlListMenu { width: 230px; padding: 6px; font-weight: 400; }
+#wlListMenu .dd-item { color: var(--text); }
+
+/* price alerts */
+#alertsBtn { position: relative; }
+#alertsBtn .badge { position: absolute; top: 1px; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--active); color: var(--text); font-size: 9px; line-height: 14px; text-align: center; }
+#alertsBtn.unseen .badge { background: #ff9800; color: #000; font-weight: 700; }
+#alertsMenu { width: 380px; padding: 6px; max-height: 70vh; overflow-y: auto; }
+.al-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.al-tabs .spacer { flex: 1; }
+.al-tab { background: none; border: 0; color: var(--muted); padding: 4px 8px; border-radius: 4px; cursor: pointer; font: inherit; }
+.al-tab.on { color: #fff; background: var(--active); }
+.al-snd { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; margin-right: 4px; cursor: pointer; }
+.al-snd input { margin: 0; }
+.al-row { display: grid; grid-template-columns: 62px 1fr auto auto; gap: 2px 8px; align-items: center; padding: 6px; border-radius: 4px; cursor: pointer; }
+.al-row.log { grid-template-columns: 62px 1fr auto; }
+.al-row:hover { background: var(--hover); }
+.al-row .sym { font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-row .st { font-size: 11px; color: var(--dim); }
+.al-row .st.on { color: #ff9800; }
+.al-row.off .sym, .al-row.off .desc { opacity: .55; }
+.al-acts { display: flex; }
+.al-acts button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 4px; font-size: 13px; }
+.al-acts button:hover { color: #fff; }
+.al-acts .del:hover { color: var(--down); }
+.al-note { grid-column: 2 / -1; color: var(--dim); font-size: 11px; }
+.al-empty { color: var(--dim); padding: 10px 6px; }
+.al-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.al-last { margin: -4px 0 0; font-size: 12px; }
+#alertForm input, #alertForm select { background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 4px; font: inherit; }
+#alertPops { position: absolute; right: 12px; bottom: 40px; z-index: 40; display: flex; flex-direction: column; gap: 8px; width: 310px; pointer-events: none; }
+.al-pop { pointer-events: auto; background: var(--panel2); border: 1px solid #ff980066; border-left: 4px solid #ff9800; border-radius: 6px; padding: 10px 12px; box-shadow: 0 8px 24px #000a; }
+.al-pop .t { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #fff; }
+.al-pop .t .ic { color: #ff9800; }
+.al-pop .n { color: var(--text); margin-top: 4px; }
+.al-pop .m { display: flex; justify-content: space-between; align-items: center; color: var(--dim); font-size: 11px; margin-top: 6px; }
+.al-pop button { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; padding: 2px 4px; }
+.al-pop button:hover { color: #fff; }
+.al-pop .x { font-size: 16px; line-height: 1; }
+.ctx-menu { display: none; position: fixed; z-index: 120; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; min-width: 200px; box-shadow: 0 8px 24px #0008; }
+.ctx-menu .dd-item { color: var(--text); white-space: nowrap; }
+.pane.alert-hover, .pane.alert-hover * { cursor: ns-resize !important; }

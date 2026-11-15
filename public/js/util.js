@@ -1,12 +1,13 @@
 // Shared helpers: icons, time-frames, formatting, session math.
 
 export const TIMEFRAMES = [
-  { id: '1m', sec: 60, dx: '1m', lookbackDays: 3 },
-  { id: '2m', sec: 120, dx: '2m', lookbackDays: 6 },
-  { id: '5m', sec: 300, dx: '5m', lookbackDays: 15 },
-  { id: '15m', sec: 900, dx: '15m', lookbackDays: 30 },
-  { id: '30m', sec: 1800, dx: '30m', lookbackDays: 60 },
-  { id: '1h', sec: 3600, dx: '1h', lookbackDays: 120 },
+  // lookbackDays = calendar days of history requested (weekends and holidays included)
+  { id: '1m', sec: 60, dx: '1m', lookbackDays: 10 },
+  { id: '2m', sec: 120, dx: '2m', lookbackDays: 15 },
+  { id: '5m', sec: 300, dx: '5m', lookbackDays: 30 },
+  { id: '15m', sec: 900, dx: '15m', lookbackDays: 60 },
+  { id: '30m', sec: 1800, dx: '30m', lookbackDays: 90 },
+  { id: '1h', sec: 3600, dx: '1h', lookbackDays: 180 },
   { id: 'D', sec: 86400, dx: '1d', lookbackDays: 365 * 6 },
   { id: 'W', sec: 604800, dx: '1w', lookbackDays: 365 * 20 },
 ];
@@ -38,6 +39,7 @@ export const ICONS = {
   undo: P('<path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 010 10h-2"/>'),
   redo: P('<path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 000 10h2"/>'),
   fit: P('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  bell: P('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
   camera: P('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
   gear: P('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1V21a2 2 0 01-4 0v-.1A1.6 1.6 0 009 19.4a1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 003 14.2H3a2 2 0 010-4h.1A1.6 1.6 0 004.6 9a1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1A1.6 1.6 0 009 4.6h0A1.6 1.6 0 0010 3.1V3a2 2 0 014 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8v0a1.6 1.6 0 001.5 1h.2a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1z"/>'),
   list: P('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'),
