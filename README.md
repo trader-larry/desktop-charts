@@ -18,7 +18,9 @@ it never touches accounts, positions or orders. Without credentials it runs on g
    - Windows: double-click `start-windows.bat`
    - Mac: double-click `start-mac.command` (first time: right-click → Open)
    - Or in a terminal inside the folder: `node server.js`
-4. Your browser opens **http://localhost:8787**. Leave the black server window open while you chart.
+4. The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
+
+Each chart also remembers its zoom and scroll for every timeframe, so it reopens showing the same span. The fit button (Alt+R) puts a chart back to the default view.
 
 The server only listens on your own machine (127.0.0.1), so nothing is exposed to your network.
 

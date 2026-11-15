@@ -47,6 +47,7 @@ delete S.symbol; delete S.tf; delete S.chartType; delete S.indicators;
 S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
+S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
 if (S.shadeEth === undefined) S.shadeEth = true; // shade pre-market / after-hours bars on intraday stock charts
 S.wlCols = { last: true, chg: true, pct: true, vol: false, ext: true, ...(S.wlCols || {}) }; // watchlist columns // per indicator type: settings saved with "Save as default"
@@ -184,6 +185,7 @@ class ChartPane {
 
     this.chart.subscribeCrosshairMove((p) => { this.updateLegendMain(p.time ?? null); syncCrosshair(this, p); });
     this.chart.timeScale().subscribeVisibleTimeRangeChange(() => syncTimeRange(this));
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => this.rememberView(r));
     this.chart.timeScale().subscribeSizeChange?.(() => setTimeout(() => this.placePaneLegends(), 0));
     this.width = 9999;
     this.ro = new ResizeObserver(() => { this.width = this.host.clientWidth; this.updateLegendMain(undefined); this.updateWatermark(); setTimeout(() => this.placePaneLegends(), 30); }); this.ro.observe(this.host);
@@ -264,13 +266,13 @@ class ChartPane {
   onBars(arr, kind) {
     if (kind === 'nodata') { toast(`No ${this.tf.id} candles received for ${this.info.symbol} yet. If this persists, send a screenshot of the browser console (F12).`, 8000); return; }
     if (kind === 'reset') {
-      const first = this.needFit; this.needFit = false;
+      const first = this.needFit; // stays true until the view is restored, so the default range is not remembered
       this.bars = arr;
       this.shown = this.transform(this.bars);
       this.mainSeries.applyOptions({ priceFormat: this.priceFormat() });
       this.mainSeries.setData(this.shown.map((b) => this.asSeries(b)));
       for (const h of this.handles.values()) try { h.update(this.bars, 'reset'); } catch (e) { console.error(e); }
-      if (first) this.resetView();
+      if (first) { this.resetView(true); this.needFit = false; }
       this.drawings.redraw();
     } else {
       const bars = this.bars; const changed = [];
@@ -288,8 +290,23 @@ class ChartPane {
     if (this === active) renderDetail();
   }
 
-  resetView() {
+  viewKey() { return `${this.cfg.id}|${this.tf.id}`; }
+  // Remember how far back / ahead of the last bar this chart is zoomed, so it reopens the same way.
+  rememberView(r) {
+    const n = this.bars.length; if (!r || !n || this.needFit) return;
+    const v = { back: +(n - 1 - r.from).toFixed(2), ahead: +(r.to - (n - 1)).toFixed(2) };
+    const old = S.views[this.viewKey()];
+    if (old && old.back === v.back && old.ahead === v.ahead) return;
+    S.views[this.viewKey()] = v; save();
+  }
+  resetView(useSaved = false) {
     const n = this.bars.length; if (!n) return;
+    const v = useSaved && S.views[this.viewKey()];
+    if (v && v.back > 1 && isFinite(v.ahead)) {
+      this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - v.back, to: n - 1 + v.ahead });
+      this.chart.priceScale('right').applyOptions({ autoScale: true });
+      return;
+    }
     const vis = Math.min(n, this.tf.sec >= 86400 ? 200 : 160);
     this.chart.timeScale().setVisibleLogicalRange({ from: n - vis, to: n - 1 + 12 });
     this.chart.priceScale('right').applyOptions({ autoScale: true });
