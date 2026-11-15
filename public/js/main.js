@@ -47,6 +47,7 @@ delete S.symbol; delete S.tf; delete S.chartType; delete S.indicators;
 S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
+S.alerts ||= []; S.alertLog ||= []; if (S.alertSound === undefined) S.alertSound = true; // price alerts
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
 if (S.shadeEth === undefined) S.shadeEth = true; // shade pre-market / after-hours bars on intraday stock charts
@@ -133,6 +134,11 @@ class ChartPane {
     $('#panes').append(this.root);
     // Must be registered before the drawing handlers so a click on another chart activates it first.
     this.root.addEventListener('pointerdown', () => setActive(this), { capture: true });
+    this.alertLines = [];
+    this.root.addEventListener('pointerdown', (e) => this.alertDragStart(e), { capture: true });
+    this.root.addEventListener('mousedown', (e) => { if (this.alertDrag) { e.stopImmediatePropagation(); e.preventDefault(); } }, { capture: true });
+    this.root.addEventListener('pointermove', (e) => { if (!this.alertDrag) this.root.classList.toggle('alert-hover', !!this.alertAt(e)); });
+    this.root.addEventListener('contextmenu', (e) => this.chartMenu(e));
 
     const self = this;
     this.chart = createChart(this.host, {
@@ -177,7 +183,7 @@ class ChartPane {
         // keep drawings that belong to other charts, replace the ones this chart shows
         const ss = symState(this.info.symbol);
         ss.drawings = [...ss.drawings.filter((d) => d.pane && d.pane !== this.cfg.id), ...clone(list.filter((d) => d.type !== 'frvp'))];
-        save(); shareDrawings(this);
+        save(); shareDrawings(this); syncLineAlerts(this.info.symbol, list);
       },
       onSpecial: (kind, params) => this.addIndicator(kind, params, true),
       onSelect: (d) => this.renderDrawBar(d),
@@ -187,7 +193,7 @@ class ChartPane {
     this.drawings.decorate = (d) => { if (!SHARED_BY_DEFAULT.includes(d.type)) d.pane = this.cfg.id; };
     this.drawings.onTool = (t) => { if (this === active) { currentTool = t; paintTools(t); } };
 
-    this.chart.subscribeCrosshairMove((p) => { this.updateLegendMain(p.time ?? null); syncCrosshair(this, p); });
+    this.chart.subscribeCrosshairMove((p) => { this.hoverPrice = p.point && this.mainSeries ? this.mainSeries.coordinateToPrice(p.point.y) : null; this.updateLegendMain(p.time ?? null); syncCrosshair(this, p); });
     this.chart.timeScale().subscribeVisibleTimeRangeChange(() => syncTimeRange(this));
     this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => this.rememberView(r));
     this.chart.timeScale().subscribeSizeChange?.(() => setTimeout(() => this.placePaneLegends(), 0));
@@ -264,6 +270,7 @@ class ChartPane {
     }
     chart.panes().forEach((p, i) => p.setStretchFactor(i === 0 ? 4 : 1));
     this.renderLegend();
+    this.renderAlertLines();
     setTimeout(() => this.placePaneLegends(), 50);
   }
 
@@ -294,6 +301,60 @@ class ChartPane {
     if (this === active) renderDetail();
   }
 
+  // ---- price alerts on this chart ----
+  renderAlertLines() {
+    for (const l of this.alertLines) try { this.mainSeries.removePriceLine(l.line); } catch {}
+    this.alertLines = [];
+    if (!this.mainSeries) return;
+    for (const a of S.alerts) {
+      if (!a.active || a.symbol !== this.info.symbol) continue;
+      const line = this.mainSeries.createPriceLine({ price: a.price, color: ALERT_COLOR, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+        title: `Alert${a.cond === 'up' ? ' ↑' : a.cond === 'down' ? ' ↓' : ''}`, axisLabelColor: ALERT_COLOR, axisLabelTextColor: '#000' });
+      this.alertLines.push({ a, line });
+    }
+  }
+  // the alert line under the pointer (within 4px), if any
+  alertAt(e) {
+    if (!this.mainSeries || !this.alertLines.length || currentTool) return null;
+    const r = this.host.getBoundingClientRect(), y = e.clientY - r.top;
+    if (y > (this.chart.panes()[0]?.getHeight() ?? r.height)) return null;
+    for (const { a } of this.alertLines) { const ly = this.mainSeries.priceToCoordinate(a.price); if (ly != null && Math.abs(ly - y) <= 4) return a; }
+    return null;
+  }
+  alertDragStart(e) {
+    if (e.button !== 0) return;
+    const a = this.alertAt(e); if (!a) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    this.alertDrag = a; this.drawings.select(null);
+    this.chart.applyOptions({ handleScroll: false, handleScale: false });
+    const r = this.host.getBoundingClientRect(), start = a.price;
+    const move = (ev) => {
+      const p = this.mainSeries.coordinateToPrice(ev.clientY - r.top); if (p == null) return;
+      a.price = roundPrice(p, a.symbol);
+      for (const p2 of panes) for (const l of p2.alertLines) if (l.a === a) l.line.applyOptions({ price: a.price });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      this.chart.applyOptions({ handleScroll: true, handleScale: true });
+      setTimeout(() => { this.alertDrag = null; }, 0);
+      if (a.price !== start) { delete a.drawingId; save(); alertsChanged(); toast(`${a.symbol} alert moved to ${fmtPrice(a.price)}`, 1500); }
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  }
+  chartMenu(e) {
+    const r = this.host.getBoundingClientRect();
+    if (!this.mainSeries || e.clientY - r.top > (this.chart.panes()[0]?.getHeight() ?? r.height)) return;
+    e.preventDefault();
+    const sym = this.info.symbol, onLine = this.alertAt(e);
+    const p = this.mainSeries.coordinateToPrice(e.clientY - r.top); const price = p == null ? null : roundPrice(p, sym);
+    const items = [];
+    if (onLine) {
+      items.push([`Edit alert at ${fmtPrice(onLine.price)}…`, () => openAlertDialog({}, onLine)]);
+      items.push(['Delete this alert', () => deleteAlert(onLine)]);
+    } else if (price != null) items.push([`Add alert on ${sym} at ${fmtPrice(price)}…`, () => openAlertDialog({ symbol: sym, price })]);
+    items.push(['Reset chart view', () => this.resetView()]);
+    showCtxMenu(e.clientX, e.clientY, items);
+  }
   viewKey() { return `${this.cfg.id}|${this.tf.id}`; }
   // Remember how far back / ahead of the last bar this chart is zoomed, so it reopens the same way.
   rememberView(r) {
@@ -477,6 +538,11 @@ class ChartPane {
       onclick: () => { dr.updateSelected({ pane: shared ? this.cfg.id : undefined }); this.renderDrawBar(dr.selected()); } }, shared ? 'All charts' : 'This chart'));
     bar.append(el('button', { class: 'tb-btn small', title: 'Line width', onclick: () => { dr.updateSelected({ width: (d.width % 3) + 1 }); this.renderDrawBar(dr.selected()); } }, `${d.width || 1}px`));
     if (d.type === 'text') bar.append(el('button', { class: 'tb-btn small', onclick: () => { const t = prompt('Text', d.text); if (t != null) dr.updateSelected({ text: t }); } }, 'Edit'));
+    if (d.type === 'hline' || d.type === 'hray') {
+      const linked = S.alerts.find((a) => a.drawingId === d.id && a.symbol === this.info.symbol);
+      bar.append(el('button', { class: 'tb-btn small' + (linked?.active ? ' on' : ''), title: linked ? 'Edit the alert on this line' : 'Alert me when price crosses this line',
+        onclick: () => linked ? openAlertDialog({}, linked) : openAlertDialog({ symbol: this.info.symbol, price: roundPrice(d.pts[0].p, this.info.symbol), drawingId: d.id }) }, `<span class="ic">${ICONS.bell}</span>${linked ? 'Alert' : 'Add alert'}`));
+    }
     if (d.type === 'fib') bar.append(el('button', { class: 'tb-btn small' + (d.extend ? ' on' : ''), onclick: () => { dr.updateSelected({ extend: !d.extend }); this.renderDrawBar(dr.selected()); } }, 'Extend'));
     bar.append(el('button', { class: 'tb-btn icon-btn small', title: 'Delete (Del)', onclick: () => dr.removeSelected() }, `<span class="ic">${ICONS.trash}</span>`));
     bar.classList.remove('hidden');
@@ -760,6 +826,199 @@ $('#savedBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#layou
 $('#savedMenu').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#savedDD').classList.remove('open'));
 
+// ===================== price alerts =====================
+// Checked in this window while the app is open: each new price for a symbol is compared with the previous one,
+// and an alert fires when the price crosses its level.
+const ALERT_COLOR = '#ff9800';
+const ALERT_COND = { cross: 'Crossing', up: 'Crossing up', down: 'Crossing down' };
+const lastPx = new Map();
+let alertTab = 'alerts', unseenAlerts = 0, editingAlert = null, alertInit = null;
+const alertSymbols = () => [...new Set(S.alerts.filter((a) => a.active).map((a) => a.symbol))];
+function roundPrice(p, sym) { const ref = quotes.get(sym)?.last ?? p; return +p.toFixed(decimalsFor(ref)); }
+// the live price: for stocks and ETFs outside regular hours, the pre-market / after-hours price
+function alertPrice(q) {
+  if (!q) return NaN;
+  if (feed?.mode !== 'demo' && symbolKind(q.symbol) === 'equity' && extSession() && isFinite(q.ethLast)) return q.ethLast;
+  return isFinite(q.last) ? q.last : NaN;
+}
+function currentPrice(sym) {
+  const p = alertPrice(quotes.get(sym)); if (isFinite(p)) return p;
+  const pane = panes.find((x) => x.info.symbol === sym); return pane?.bars.at(-1)?.close;
+}
+function checkAlerts(sym, p) {
+  if (!isFinite(p)) return;
+  const prev = lastPx.get(sym); lastPx.set(sym, p);
+  if (prev === undefined || prev === p) return;
+  const now = Date.now(); let fired = false;
+  for (const a of S.alerts) {
+    if (!a.active || a.symbol !== sym) continue;
+    const up = prev < a.price && p >= a.price, down = prev > a.price && p <= a.price;
+    if (!(a.cond === 'up' ? up : a.cond === 'down' ? down : up || down)) continue;
+    if (a.mode === 'every' && a.lastFired && now - a.lastFired < 60000) continue;
+    a.lastFired = now; fired = true;
+    if (a.mode !== 'every') a.active = false;
+    fireAlert(a, p, up ? 'up' : 'down');
+  }
+  if (fired) { save(); alertsChanged(); }
+}
+function fireAlert(a, px, dir) {
+  const text = `${a.symbol} crossed ${dir} through ${fmtPrice(a.price)}`;
+  const entry = { id: uid(), alertId: a.id, symbol: a.symbol, text, note: a.note || '', price: px, at: Date.now() };
+  S.alertLog.unshift(entry); if (S.alertLog.length > 200) S.alertLog.length = 200;
+  unseenAlerts++;
+  playAlertSound();
+  showAlertPop(entry);
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification(`Alert: ${a.symbol}`, { body: `${text} (last ${fmtPrice(px)})${a.note ? `\n${a.note}` : ''}`, tag: entry.id, requireInteraction: true });
+      n.onclick = () => { window.focus(); active?.loadSymbol(a.symbol); n.close(); };
+    }
+  } catch (e) { console.warn('notification', e); }
+}
+// sound: a short chime made with Web Audio (browsers allow sound only after the first click or key press)
+let audioCtx = null;
+function unlockAudio() { try { audioCtx ||= new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch {} }
+window.addEventListener('pointerdown', unlockAudio, { capture: true }); window.addEventListener('keydown', unlockAudio, { capture: true });
+function playAlertSound() {
+  if (!S.alertSound) return;
+  unlockAudio(); const c = audioCtx; if (!c) return;
+  const t0 = c.currentTime + 0.02;
+  for (let k = 0; k < 2; k++) [880, 1175, 1568].forEach((f, i) => {
+    const t = t0 + k * 0.6 + i * 0.13, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.32);
+  });
+}
+const fmtWhen = (ms) => { const p = parts(ms / 1000, S.tz); return `${p.month}/${p.day} ${p.hour}:${p.minute}`; };
+function showAlertPop(entry) {
+  const box = $('#alertPops');
+  const pop = el('div', { class: 'al-pop' }, `<div class="t"><span class="ic">${ICONS.bell}</span><span></span></div>${entry.note ? '<div class="n"></div>' : ''}
+    <div class="m"><span>${fmtWhen(entry.at)} · last ${fmtPrice(entry.price)}</span><span><button class="go">Open chart</button><button class="x" title="Dismiss">×</button></span></div>`);
+  pop.querySelector('.t span:last-child').textContent = entry.text;
+  if (entry.note) pop.querySelector('.n').textContent = entry.note;
+  pop.querySelector('.go').addEventListener('click', () => { active?.loadSymbol(entry.symbol); pop.remove(); });
+  pop.querySelector('.x').addEventListener('click', () => pop.remove());
+  box.prepend(pop);
+  while (box.children.length > 5) box.lastChild.remove();
+}
+function askNotifyPermission() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {} }
+function alertsChanged() {
+  for (const p of panes) p.renderAlertLines();
+  for (const p of panes) { const d = p.drawings.selected?.(); if (d) p.renderDrawBar(d); }
+  renderAlertsBtn();
+  if ($('#alertsDD').classList.contains('open')) renderAlertsMenu();
+  const syms = alertSymbols().join(','); if (syms !== alertsChanged.syms) { alertsChanged.syms = syms; refreshQuoteSubs(); }
+}
+function renderAlertsBtn() {
+  const n = S.alerts.filter((a) => a.active).length, b = $('#alertsBadge');
+  b.textContent = unseenAlerts ? String(unseenAlerts) : String(n);
+  b.classList.toggle('hidden', !n && !unseenAlerts);
+  $('#alertsBtn').classList.toggle('unseen', unseenAlerts > 0);
+}
+function syncLineAlerts(sym, list) {
+  let changed = false;
+  for (const d of list) {
+    if (d.type !== 'hline' && d.type !== 'hray') continue;
+    for (const a of S.alerts) if (a.drawingId === d.id && a.symbol === sym) { const p = roundPrice(d.pts[0].p, sym); if (a.price !== p) { a.price = p; changed = true; } }
+  }
+  if (changed) { save(); alertsChanged(); }
+}
+function deleteAlert(a) { S.alerts = S.alerts.filter((x) => x !== a); save(); alertsChanged(); }
+function openAlertDialog(init = {}, existing = null) {
+  editingAlert = existing; alertInit = init;
+  const sym = existing?.symbol || init.symbol || active.info.symbol;
+  const price = existing?.price ?? init.price ?? currentPrice(sym);
+  $('#alertTitle').textContent = existing ? `Edit alert · ${sym}` : `Create alert · ${sym}`;
+  $('#alertOk').textContent = existing ? 'Save' : 'Create';
+  $('#alSym').value = sym;
+  $('#alCond').value = existing?.cond || 'cross';
+  $('#alPrice').value = isFinite(price) ? roundPrice(price, sym) : '';
+  $('#alMode').value = existing?.mode || 'once';
+  $('#alNote').value = existing?.note || '';
+  const last = currentPrice(sym); $('#alLast').textContent = isFinite(last) ? `Last price ${fmtPrice(last)}` : '';
+  openModal('#alertModal');
+  setTimeout(() => { $('#alPrice').focus(); $('#alPrice').select(); }, 0);
+}
+function submitAlert() {
+  const symbol = $('#alSym').value.trim().toUpperCase(), price = Number($('#alPrice').value);
+  if (!symbol) { $('#alSym').focus(); return; }
+  if (!isFinite(price) || price <= 0 || $('#alPrice').value === '') { $('#alPrice').focus(); return; }
+  const fields = { symbol, price, cond: $('#alCond').value, mode: $('#alMode').value, note: $('#alNote').value.trim() };
+  if (editingAlert) {
+    if (editingAlert.symbol !== symbol || editingAlert.price !== price) delete editingAlert.drawingId;
+    Object.assign(editingAlert, fields, { active: true, lastFired: null });
+  } else {
+    const a = { id: uid(), ...fields, active: true, created: Date.now() };
+    if (alertInit?.drawingId && alertInit.symbol === symbol) a.drawingId = alertInit.drawingId;
+    S.alerts.push(a);
+  }
+  askNotifyPermission(); unlockAudio();
+  save(); alertsChanged(); closeModals();
+  toast(`Alert ${editingAlert ? 'saved' : 'set'}: ${symbol} ${ALERT_COND[fields.cond].toLowerCase()} ${fmtPrice(price)}`, 2000);
+  editingAlert = null;
+}
+$('#alertOk').addEventListener('click', submitAlert);
+$('#alertForm').addEventListener('submit', (e) => { e.preventDefault(); submitAlert(); });
+function renderAlertsMenu() {
+  const m = $('#alertsMenu'); m.innerHTML = '';
+  const tabs = el('div', { class: 'al-tabs' });
+  const tab = (id, label) => { const b = el('button', { class: 'al-tab' + (alertTab === id ? ' on' : '') }, label); b.addEventListener('click', () => { alertTab = id; renderAlertsMenu(); }); tabs.append(b); };
+  tab('alerts', `Alerts${S.alerts.length ? ` (${S.alerts.length})` : ''}`); tab('log', `Log${S.alertLog.length ? ` (${S.alertLog.length})` : ''}`);
+  tabs.append(el('span', { class: 'spacer' }));
+  const snd = el('label', { class: 'al-snd', title: 'Play a sound when an alert fires' }); const cb = el('input', { type: 'checkbox' }); cb.checked = S.alertSound;
+  cb.addEventListener('change', () => { S.alertSound = cb.checked; save(); if (cb.checked) playAlertSound(); }); snd.append(cb, el('span', {}, 'Sound'));
+  tabs.append(snd);
+  const add = el('button', { class: 'tb-btn small', title: 'Create an alert for the active chart (Alt+A)' }, '+ Create');
+  add.addEventListener('click', () => { $('#alertsDD').classList.remove('open'); openAlertDialog({ symbol: active.info.symbol }); });
+  tabs.append(add); m.append(tabs);
+  if (alertTab === 'log') {
+    unseenAlerts = 0; renderAlertsBtn();
+    if (!S.alertLog.length) { m.append(el('div', { class: 'al-empty' }, 'No alerts have fired yet.')); return; }
+    for (const x of S.alertLog) {
+      const r = el('div', { class: 'al-row log', title: `Open ${x.symbol}` }, `<span class="sym"></span><span class="desc"></span><span class="st">${fmtWhen(x.at)}</span>${x.note ? '<span class="al-note"></span>' : ''}`);
+      r.querySelector('.sym').textContent = x.symbol; r.querySelector('.desc').textContent = x.text.replace(`${x.symbol} `, '');
+      if (x.note) r.querySelector('.al-note').textContent = x.note;
+      r.addEventListener('click', () => { $('#alertsDD').classList.remove('open'); active.loadSymbol(x.symbol); });
+      m.append(r);
+    }
+    const clr = el('button', { class: 'dd-item' }, 'Clear log'); clr.addEventListener('click', () => { S.alertLog = []; save(); renderAlertsMenu(); }); m.append(clr);
+    return;
+  }
+  if (!S.alerts.length) { m.append(el('div', { class: 'al-empty' }, 'No alerts yet. Right-click a chart, press Alt+A, or click + Create.')); return; }
+  const list = [...S.alerts].sort((a, b) => (b.active - a.active) || a.symbol.localeCompare(b.symbol) || a.price - b.price);
+  for (const a of list) {
+    const st = a.active ? 'Active' : a.lastFired ? 'Triggered' : 'Stopped';
+    const r = el('div', { class: 'al-row' + (a.active ? '' : ' off'), title: `Open ${a.symbol}` },
+      `<span class="sym"></span><span class="desc">${ALERT_COND[a.cond] || 'Crossing'} ${fmtPrice(a.price)}${a.mode === 'every' ? ' · every time' : ''}</span><span class="st${a.active ? ' on' : ''}">${st}</span>
+      <span class="al-acts"><button class="tog" title="${a.active ? 'Stop' : 'Restart'}">${a.active ? '⏸' : '▶'}</button><button class="ed" title="Edit">✎</button><button class="del" title="Delete">×</button></span>${a.note ? '<span class="al-note"></span>' : ''}`);
+    r.querySelector('.sym').textContent = a.symbol;
+    if (a.note) r.querySelector('.al-note').textContent = a.note;
+    r.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b?.classList.contains('tog')) { a.active = !a.active; if (a.active) a.lastFired = null; save(); alertsChanged(); return; }
+      if (b?.classList.contains('ed')) { $('#alertsDD').classList.remove('open'); openAlertDialog({}, a); return; }
+      if (b?.classList.contains('del')) { deleteAlert(a); return; }
+      $('#alertsDD').classList.remove('open'); if (active.info.symbol !== a.symbol) active.loadSymbol(a.symbol);
+    });
+    m.append(r);
+  }
+}
+$('#alertsBtn').addEventListener('click', (e) => { e.stopPropagation(); for (const id of ['#savedDD', '#layoutDD', '#chartTypeDD']) $(id)?.classList.remove('open'); if (unseenAlerts) alertTab = 'log'; renderAlertsMenu(); $('#alertsDD').classList.toggle('open'); });
+$('#alertsMenu').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => $('#alertsDD').classList.remove('open'));
+// right-click menu on a chart
+function showCtxMenu(x, y, items) {
+  const m = $('#ctxMenu'); m.innerHTML = '';
+  for (const [label, fn] of items) { const b = el('button', { class: 'dd-item' }, label); b.addEventListener('click', () => { hideCtxMenu(); fn(); }); m.append(b); }
+  m.style.display = 'block';
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = `${Math.min(x, innerWidth - w - 4)}px`; m.style.top = `${Math.min(y, innerHeight - h - 4)}px`;
+}
+function hideCtxMenu() { $('#ctxMenu').style.display = 'none'; }
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ctxMenu')) hideCtxMenu(); }, { capture: true });
+window.addEventListener('blur', hideCtxMenu);
+
 // ===================== top bar =====================
 function renderTopbar() {
   if (!active) return;
@@ -887,7 +1146,7 @@ $('#symbolBtn').addEventListener('click', () => openSymbol());
 const resolved = new Map();
 async function refreshQuoteSubs() {
   const infos = [];
-  await Promise.all(S.watchlist.map(async (s) => {
+  await Promise.all([...new Set([...S.watchlist, ...alertSymbols()])].map(async (s) => {
     try { if (!resolved.has(s)) resolved.set(s, await feed.resolve(s)); infos.push(resolved.get(s)); } catch (e) { console.warn('resolve', s, e.message); }
   }));
   feed.setQuoteSymbols(infos);
@@ -1079,12 +1338,14 @@ function hideToast() { $('#toast').classList.add('hidden'); }
 window.addEventListener('keydown', (e) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName);
   const modalOpen = !$('#modalBack').classList.contains('hidden');
+  if (e.key === 'Escape') hideCtxMenu();
   if (e.key === 'Escape') { if (modalOpen) closeModals(); else { active.drawings.creating = null; setTool(null); active.drawings.select(null); } return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!modalOpen) saveLayout(); return; }
   if (typing || modalOpen || !active) return;
   const d = active.drawings;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? d.redo() : d.undo(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); d.redo(); return; }
+  if (e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); openAlertDialog({ symbol: active.info.symbol, price: active.hoverPrice != null ? roundPrice(active.hoverPrice, active.info.symbol) : undefined }); return; }
   if (e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); active.resetView(); return; }
   if (e.altKey && e.key === 'Enter') { e.preventDefault(); toggleMaximize(); return; }
   if (e.key === 'Tab' && panes.length > 1 && !e.ctrlKey && !e.altKey) { e.preventDefault(); const i = panes.indexOf(active); setActive(panes[(i + (e.shiftKey ? panes.length - 1 : 1)) % panes.length]); return; }
@@ -1107,10 +1368,10 @@ async function boot() {
     feed = new DemoFeed(); feed.onStatus = setConn; await feed.init();
     if (status.configured && status.error) setConn('err', `tastytrade login failed, showing demo data: ${status.error}`);
   }
-  feed.onQuote = (q) => { quotes.set(q.symbol, { ...(quotes.get(q.symbol) || {}), ...Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && !Number.isNaN(v))) }); paintQuote(q.symbol); if (q.symbol === active?.info.symbol) renderDetail(); };
+  feed.onQuote = (q) => { quotes.set(q.symbol, { ...(quotes.get(q.symbol) || {}), ...Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && !Number.isNaN(v))) }); paintQuote(q.symbol); if (q.symbol === active?.info.symbol) renderDetail(); checkAlerts(q.symbol, alertPrice(quotes.get(q.symbol))); };
   applyLayout(S.layout);
-  renderSavedBtn();
+  renderSavedBtn(); renderAlertsBtn(); alertsChanged.syms = alertSymbols().join(',');
   refreshQuoteSubs();
 }
 boot();
-window.__charts = { chartImage, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };
+window.__charts = { chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };

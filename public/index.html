@@ -34,6 +34,10 @@
       <div class="sep"></div>
       <button class="tb-btn icon-btn" id="fitBtn" title="Reset chart view (Alt+R)"><span class="ic" data-icon="fit"></span></button>
       <button class="tb-btn icon-btn" id="shotBtn" title="Save chart image"><span class="ic" data-icon="camera"></span></button>
+      <div class="dropdown right" id="alertsDD">
+        <button class="tb-btn icon-btn" id="alertsBtn" title="Price alerts (Alt+A adds one at the cursor)"><span class="ic" data-icon="bell"></span><span class="badge hidden" id="alertsBadge"></span></button>
+        <div class="dd-menu" id="alertsMenu"></div>
+      </div>
       <button class="tb-btn icon-btn" id="settingsBtn" title="Settings and data connection"><span class="ic" data-icon="gear"></span></button>
       <button class="tb-btn icon-btn" id="watchToggle" title="Toggle watchlist"><span class="ic" data-icon="list"></span></button>
     </header>
@@ -43,6 +47,7 @@
     <main id="chartWrap">
       <div id="panes"></div>
       <div id="toast" class="hidden"></div>
+      <div id="alertPops"></div>
     </main>
 
     <aside id="watchlist">
@@ -104,6 +109,24 @@
         </div></div>
       <span class="spacer"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="paramOk">OK</button></div>
   </div>
+
+  <div id="alertModal" class="modal hidden narrow" role="dialog" aria-label="Price alert">
+    <div class="modal-head"><h2 id="alertTitle">Create alert</h2><button class="x" data-close>×</button></div>
+    <form id="alertForm" class="set-body">
+      <label>Symbol<input id="alSym" type="text" autocomplete="off" spellcheck="false" /></label>
+      <div class="al-2">
+        <label>Condition<select id="alCond"><option value="cross">Crossing</option><option value="up">Crossing up</option><option value="down">Crossing down</option></select></label>
+        <label>Price<input id="alPrice" type="number" step="any" /></label>
+      </div>
+      <p class="muted al-last" id="alLast"></p>
+      <label>Trigger<select id="alMode"><option value="once">Only once</option><option value="every">Every time (at most once a minute)</option></select></label>
+      <label>Message (optional)<input id="alNote" type="text" autocomplete="off" placeholder="e.g. breakout above resistance" /></label>
+      <p class="muted">Alerts are checked while this app is open (it can be in the background). They use the live price, including pre-market and after-hours for stocks.</p>
+      <button type="submit" hidden></button>
+    </form>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="alertOk">Create</button></div>
+  </div>
+  <div id="ctxMenu" class="ctx-menu"></div>
 
   <div id="setModal" class="modal hidden narrow" role="dialog" aria-label="Settings">
     <div class="modal-head"><h2>Settings</h2><button class="x" data-close>×</button></div>
