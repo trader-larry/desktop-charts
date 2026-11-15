@@ -50,10 +50,14 @@ S.indicatorDefaults ||= {};
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
 if (S.shadeEth === undefined) S.shadeEth = true; // shade pre-market / after-hours bars on intraday stock charts
+// Several named watchlists; S.watchlist is always the one being shown.
+if (!S.watchlists || !Object.keys(S.watchlists).length) S.watchlists = { Watchlist: Array.isArray(S.watchlist) ? S.watchlist : [...DEFAULT_STATE.watchlist] };
+if (!S.watchlists[S.wlName]) S.wlName = Object.keys(S.watchlists)[0];
+S.watchlist = S.watchlists[S.wlName];
 S.wlCols = { last: true, chg: true, pct: true, vol: false, ext: true, ...(S.wlCols || {}) }; // watchlist columns // per indicator type: settings saved with "Save as default"
 let saveT = null;
 let renderSavedBtn = null; // set below
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} renderSavedBtn?.(); }, 200); };
+const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { S.watchlists[S.wlName] = S.watchlist; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} renderSavedBtn?.(); }, 200); };
 S.layouts ||= {};          // saved layouts by name: { layout, panes, sync, active }
 if (S.layoutName === undefined) S.layoutName = null; // name of the saved layout that is open (null = not saved yet)
 const symState = (sym) => (S.perSymbol[sym] ||= { drawings: [], indicators: [] });
@@ -906,9 +910,57 @@ function renderWlMenu() {
     row.append(cb, el('span', {}, name)); m.append(row);
   }
 }
-$('#wlMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); renderWlMenu(); $('#wlDD').classList.toggle('open'); });
+$('#wlMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#wlListDD').classList.remove('open'); renderWlMenu(); $('#wlDD').classList.toggle('open'); });
 $('#wlMenu').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#wlDD').classList.remove('open'));
+// ---- several watchlists (the list-name menu) ----
+function wlAskName(title, def) {
+  const n = (prompt(title, def || '') || '').trim(); if (!n) return null;
+  if (n !== def && S.watchlists[n]) { alert(`There is already a watchlist called "${n}".`); return null; }
+  return n;
+}
+function switchWatchlist(name) {
+  if (!S.watchlists[name]) return;
+  S.watchlists[S.wlName] = S.watchlist; S.wlName = name; S.watchlist = S.watchlists[name];
+  save(); renderWatchlist(); refreshQuoteSubs();
+}
+function newWatchlist(copy) {
+  const n = wlAskName(copy ? 'Copy of this watchlist, name' : 'New watchlist name', copy ? `${S.wlName} copy` : ''); if (!n) return;
+  S.watchlists[S.wlName] = S.watchlist; S.watchlists[n] = copy ? [...S.watchlist] : []; switchWatchlist(n);
+  if (!copy) openSymbol('', 'add');
+}
+function renameWatchlist() {
+  const n = wlAskName('Rename watchlist', S.wlName); if (!n || n === S.wlName) return;
+  const lists = {}; for (const [k, v] of Object.entries(S.watchlists)) lists[k === S.wlName ? n : k] = k === S.wlName ? S.watchlist : v;
+  S.watchlists = lists; S.wlName = n; save(); renderWatchlist();
+}
+function deleteWatchlist(name) {
+  const names = Object.keys(S.watchlists); if (names.length < 2) return;
+  if (!confirm(`Delete the watchlist "${name}"?`)) return;
+  delete S.watchlists[name];
+  if (name === S.wlName) { S.wlName = Object.keys(S.watchlists)[0]; S.watchlist = S.watchlists[S.wlName]; refreshQuoteSubs(); }
+  save(); renderWatchlist(); renderWlListMenu();
+}
+function renderWlListMenu() {
+  const m = $('#wlListMenu'); m.innerHTML = '';
+  const item = (label, fn) => { const b = el('button', { class: 'dd-item' }, label); b.addEventListener('click', () => { $('#wlListDD').classList.remove('open'); fn(); }); m.append(b); };
+  item('Create new list…', () => newWatchlist(false));
+  item('Make a copy…', () => newWatchlist(true));
+  item('Rename…', renameWatchlist);
+  m.append(el('div', { class: 'dd-h' }, 'Watchlists'));
+  const many = Object.keys(S.watchlists).length > 1;
+  for (const n of Object.keys(S.watchlists).sort((a, b) => a.localeCompare(b))) {
+    const cnt = (n === S.wlName ? S.watchlist : S.watchlists[n]).length;
+    const row = el('div', { class: 'saved-row' + (n === S.wlName ? ' on' : ''), title: `Show "${n}"` },
+      `<span class="nm"></span><span class="meta">${cnt} symbol${cnt === 1 ? '' : 's'}</span>${many ? '<button class="del" title="Delete">×</button>' : ''}`);
+    row.querySelector('.nm').textContent = n;
+    row.addEventListener('click', (e) => { if (e.target.closest('.del')) { e.stopPropagation(); deleteWatchlist(n); return; } $('#wlListDD').classList.remove('open'); switchWatchlist(n); });
+    m.append(row);
+  }
+}
+$('#wlListBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#wlDD').classList.remove('open'); renderWlListMenu(); $('#wlListDD').classList.toggle('open'); });
+$('#wlListMenu').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => $('#wlListDD').classList.remove('open'));
 // Regular session for US stocks: 9:30-16:00 New York, Mon-Fri. Outside it: "Pre" before the open, "Post" after.
 function extSession() {
   const p = parts(Date.now() / 1000, 'America/New_York'); const m = +p.hour * 60 + +p.minute;
@@ -928,6 +980,7 @@ function extLine(sym, q) {
 }
 function renderWatchlist() {
   renderWlCols();
+  $('#wlName').textContent = S.wlName;
   const box = $('#wlRows'); box.innerHTML = '';
   const shown = new Set(panes.map((p) => p.info.symbol));
   const cols = WL_COLS.filter((c) => S.wlCols[c[0]]).map((c) => `<span class="${c[0]}"></span>`).join('');

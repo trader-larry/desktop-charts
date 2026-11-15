@@ -194,3 +194,9 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 .wl-ext.detail { display: flex; gap: 8px; font-size: 12px; margin: 2px 0 4px; }
 .legend .l-desc { color: var(--muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #panes.multi .legend .l-desc { max-width: 160px; }
+.wl-list-btn { display: flex; align-items: center; gap: 4px; background: none; border: 0; color: var(--text); font: inherit; font-weight: 600; padding: 3px 6px; margin-left: -6px; border-radius: 4px; cursor: pointer; max-width: 170px; }
+.wl-list-btn:hover { background: var(--hover); }
+#wlName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-list-btn .caret { color: var(--muted); font-size: 10px; }
+#wlListMenu { width: 230px; padding: 6px; font-weight: 400; }
+#wlListMenu .dd-item { color: var(--text); }
