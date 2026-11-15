@@ -1,0 +1,8 @@
+{
+  "port": 8787,
+  "tastytrade": {
+    "apiBaseUrl": "https://api.tastyworks.com",
+    "clientSecret": "PASTE_CLIENT_SECRET_HERE",
+    "refreshToken": "PASTE_REFRESH_TOKEN_HERE"
+  }
+}

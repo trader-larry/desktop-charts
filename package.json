@@ -1,0 +1,15 @@
+{
+  "name": "local-charts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local TradingView-style charting app (Lightweight Charts + tastytrade DXLink data)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo"
+  },
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "lightweight-charts": "5.2.1"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+# Your tastytrade credentials live here. Never commit it.
+config.json
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db

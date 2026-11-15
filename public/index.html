@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Charts</title>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <button id="symbolBtn" class="tb-btn symbol-btn" title="Change symbol (or just start typing)"><span id="symbolText">SPY</span></button>
+      <div class="sep"></div>
+      <div id="tfGroup" class="btn-group"></div>
+      <div class="sep"></div>
+      <div class="dropdown" id="chartTypeDD">
+        <button class="tb-btn icon-btn" id="chartTypeBtn" title="Chart type"></button>
+        <div class="dd-menu" id="chartTypeMenu"></div>
+      </div>
+      <div class="sep"></div>
+      <button class="tb-btn" id="indicatorsBtn" title="Indicators (/)"><span class="ic" data-icon="fx"></span>Indicators</button>
+      <div class="sep"></div>
+      <button class="tb-btn icon-btn" id="undoBtn" title="Undo (Ctrl+Z)"><span class="ic" data-icon="undo"></span></button>
+      <button class="tb-btn icon-btn" id="redoBtn" title="Redo (Ctrl+Y)"><span class="ic" data-icon="redo"></span></button>
+      <div class="spacer"></div>
+      <div class="dropdown right" id="savedDD">
+        <button class="tb-btn" id="savedBtn"><span class="ic small" data-icon="save"></span><span id="savedName">Unsaved layout</span><span class="caret">▾</span></button>
+        <div class="dd-menu" id="savedMenu"></div>
+      </div>
+      <div class="dropdown right" id="layoutDD">
+        <button class="tb-btn icon-btn" id="layoutBtn" title="Chart layout: show several charts at once"></button>
+        <div class="dd-menu" id="layoutMenu"></div>
+      </div>
+      <div class="sep"></div>
+      <button class="tb-btn icon-btn" id="fitBtn" title="Reset chart view (Alt+R)"><span class="ic" data-icon="fit"></span></button>
+      <button class="tb-btn icon-btn" id="shotBtn" title="Save chart image"><span class="ic" data-icon="camera"></span></button>
+      <button class="tb-btn icon-btn" id="settingsBtn" title="Settings and data connection"><span class="ic" data-icon="gear"></span></button>
+      <button class="tb-btn icon-btn" id="watchToggle" title="Toggle watchlist"><span class="ic" data-icon="list"></span></button>
+    </header>
+
+    <aside id="toolbar"></aside>
+
+    <main id="chartWrap">
+      <div id="panes"></div>
+      <div id="toast" class="hidden"></div>
+    </main>
+
+    <aside id="watchlist">
+      <div class="wl-head">
+        <span>Watchlist</span>
+        <span class="wl-acts">
+          <button class="tb-btn icon-btn small" id="wlAdd" title="Add symbol"><span class="ic" data-icon="plus"></span></button>
+          <span class="dropdown right" id="wlDD"><button class="tb-btn icon-btn small" id="wlMenuBtn" title="Watchlist options"><span class="ic" data-icon="dots"></span></button>
+            <div class="dd-menu" id="wlMenu"></div></span>
+        </span>
+      </div>
+      <div class="wl-cols" id="wlCols"></div>
+      <div id="wlRows"></div>
+      <div id="wlDetail"></div>
+    </aside>
+
+    <footer id="statusbar">
+      <span id="connDot" class="dot"></span><span id="connText">Connecting…</span>
+      <span class="spacer"></span>
+      <a class="credit" href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noopener" title="Charts are drawn with TradingView's open-source Lightweight Charts library">Charts by TradingView Lightweight Charts™</a>
+      <button class="tb-btn small" id="rthBtn" title="Regular trading hours only (stocks / ETFs)">ETH</button>
+      <button class="tb-btn small" id="tzBtn" title="Time zone"></button>
+      <span id="clock"></span>
+    </footer>
+  </div>
+
+  <!-- Modals -->
+  <div id="modalBack" class="hidden"></div>
+
+  <div id="indModal" class="modal hidden" role="dialog" aria-label="Indicators">
+    <div class="modal-head"><h2>Indicators, metrics, and studies</h2><button class="x" data-close>×</button></div>
+    <div class="search-box"><span class="ic" data-icon="search"></span><input id="indSearch" placeholder="Search" autocomplete="off" /></div>
+    <div class="ind-body">
+      <nav id="indCats"></nav>
+      <div class="ind-list">
+        <div class="ind-list-head"><span>Script name</span><span>Category</span></div>
+        <div id="indRows"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="symModal" class="modal hidden narrow" role="dialog" aria-label="Symbol search">
+    <div class="modal-head"><h2 id="symTitle">Symbol search</h2><button class="x" data-close>×</button></div>
+    <div class="search-box"><span class="ic" data-icon="search"></span><input id="symInput" placeholder="AAPL, SPY, /ES, /NQ, BTC/USD…" autocomplete="off" spellcheck="false" /></div>
+    <div id="symRows" class="sym-rows"></div>
+    <div class="hint">Futures: type the root with a slash (/ES, /NQ, /CL, /GC) for the front month. Press Enter to load.</div>
+  </div>
+
+  <div id="paramModal" class="modal hidden narrow" role="dialog" aria-label="Indicator settings">
+    <div class="modal-head"><h2 id="paramTitle">Settings</h2><button class="x" data-close>×</button></div>
+    <form id="paramForm"></form>
+    <div class="modal-foot param-foot">
+      <div class="dropdown up" id="paramDD"><button class="btn" id="paramDDBtn">Defaults ▾</button>
+        <div class="dd-menu">
+          <button class="dd-item" id="paramAll" title="Use these settings for this indicator on every chart">Apply to all charts</button>
+          <button class="dd-item" id="paramDef" title="Use these settings whenever you add this indicator from now on">Save as default</button>
+          <button class="dd-item" id="paramReset" title="Fill in the saved default settings">Reset to default</button>
+        </div></div>
+      <span class="spacer"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="paramOk">OK</button></div>
+  </div>
+
+  <div id="setModal" class="modal hidden narrow" role="dialog" aria-label="Settings">
+    <div class="modal-head"><h2>Settings</h2><button class="x" data-close>×</button></div>
+    <div class="set-body">
+      <h3>tastytrade data connection</h3>
+      <p id="connInfo" class="muted"></p>
+      <p class="muted">Paste the client secret and refresh token from your tastytrade personal OAuth app
+        (tastytrade.com → My Profile → API → OAuth Applications → Manage → Create Grant).
+        They are saved only in <code>config.json</code> next to the app on this computer, and are never sent to the browser.</p>
+      <label>Client secret<input id="cfgSecret" type="password" autocomplete="off" placeholder="leave blank to keep current" /></label>
+      <label>Refresh token<input id="cfgRefresh" type="password" autocomplete="off" placeholder="leave blank to keep current" /></label>
+      <label class="row"><input id="cfgSandbox" type="checkbox" /> Use sandbox (cert) environment</label>
+      <div class="row-btns"><button class="btn primary" id="cfgSave">Save and connect</button><button class="btn" id="cfgClear">Remove credentials</button></div>
+      <p id="cfgMsg" class="muted"></p>
+      <h3>Display</h3>
+      <label>Time zone<select id="tzSelect"></select></label>
+      <label class="row"><input id="optRth" type="checkbox" /> Regular trading hours only (stocks / ETFs)</label>
+      <label class="row"><input id="optShade" type="checkbox" /> Shade extended hours (pre-market and after-hours) on intraday stock charts</label>
+      <label class="row"><input id="optWatermark" type="checkbox" /> Symbol watermark (large faint symbol and description behind the chart)</label>
+      <label class="row"><input id="optGrid" type="checkbox" /> Show grid</label>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
