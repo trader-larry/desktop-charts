@@ -1,12 +1,13 @@
 // Shared helpers: icons, time-frames, formatting, session math.
 
 export const TIMEFRAMES = [
-  { id: '1m', sec: 60, dx: '1m', lookbackDays: 3 },
-  { id: '2m', sec: 120, dx: '2m', lookbackDays: 6 },
-  { id: '5m', sec: 300, dx: '5m', lookbackDays: 15 },
-  { id: '15m', sec: 900, dx: '15m', lookbackDays: 30 },
-  { id: '30m', sec: 1800, dx: '30m', lookbackDays: 60 },
-  { id: '1h', sec: 3600, dx: '1h', lookbackDays: 120 },
+  // lookbackDays = calendar days of history requested (weekends and holidays included)
+  { id: '1m', sec: 60, dx: '1m', lookbackDays: 10 },
+  { id: '2m', sec: 120, dx: '2m', lookbackDays: 15 },
+  { id: '5m', sec: 300, dx: '5m', lookbackDays: 30 },
+  { id: '15m', sec: 900, dx: '15m', lookbackDays: 60 },
+  { id: '30m', sec: 1800, dx: '30m', lookbackDays: 90 },
+  { id: '1h', sec: 3600, dx: '1h', lookbackDays: 180 },
   { id: 'D', sec: 86400, dx: '1d', lookbackDays: 365 * 6 },
   { id: 'W', sec: 604800, dx: '1w', lookbackDays: 365 * 20 },
 ];
