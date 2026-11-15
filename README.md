@@ -8,7 +8,7 @@ and anchored VWAP. Charts are drawn with TradingView's open-source
 Market data comes from tastytrade (DXLink streaming). The app is **read-only charting**:
 it never touches accounts, positions or orders. Without credentials it runs on generated demo data.
 
-![Four-chart layout with volume profiles and watchlist (demo data)](docs/screenshot.png)
+![Four 5-minute charts (SPY, QQQ, IWM, AAPL) with volume profiles and the watchlist (demo data)](docs/screenshot.png)
 
 ## Run it
 
