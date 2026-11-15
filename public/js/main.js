@@ -117,6 +117,31 @@ class EthShade {
   }
 }
 
+// ===================== alert line markers =====================
+// A small arrow at the right end of each alert line: ▸ for crossing, ▲ for crossing up, ▼ for crossing down.
+class AlertMarks {
+  constructor(pane) { this.p = pane; this._views = [{ zOrder: () => 'normal', renderer: () => this }]; }
+  attached({ requestUpdate }) { this.requestUpdate = requestUpdate; }
+  detached() { this.requestUpdate = null; }
+  paneViews() { return this._views; }
+  updateAllViews() {}
+  draw(target) {
+    const p = this.p; if (!p.alertLines?.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize: sz }) => {
+      ctx.fillStyle = ALERT_COLOR;
+      for (const { a } of p.alertLines) {
+        const y = p.mainSeries.priceToCoordinate(a.price); if (y == null) continue;
+        const x = sz.width - 9, s = 5;
+        ctx.beginPath();
+        if (a.cond === 'up') { ctx.moveTo(x - s, y + s - 1); ctx.lineTo(x + s, y + s - 1); ctx.lineTo(x, y - s - 1); }
+        else if (a.cond === 'down') { ctx.moveTo(x - s, y - s + 1); ctx.lineTo(x + s, y - s + 1); ctx.lineTo(x, y + s + 1); }
+        else { ctx.moveTo(x - s + 1, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x - s + 1, y + s); }
+        ctx.closePath(); ctx.fill();
+      }
+    });
+  }
+}
+
 // ===================== one chart =====================
 class ChartPane {
   constructor(cfg) {
@@ -248,11 +273,12 @@ class ChartPane {
     const chart = this.chart;
     for (const h of this.handles.values()) { try { h.destroy(); } catch (e) { console.error(e); } }
     this.handles.clear();
-    if (this.mainSeries) { try { this.mainSeries.detachPrimitive(this.drawings.primitive); } catch {} try { if (this.ethShade) this.mainSeries.detachPrimitive(this.ethShade); } catch {} chart.removeSeries(this.mainSeries); }
+    if (this.mainSeries) { try { this.mainSeries.detachPrimitive(this.drawings.primitive); } catch {} try { if (this.ethShade) this.mainSeries.detachPrimitive(this.ethShade); } catch {} try { if (this.alertMarks) this.mainSeries.detachPrimitive(this.alertMarks); } catch {} chart.removeSeries(this.mainSeries); }
     for (let i = chart.panes().length - 1; i > 0; i--) { try { chart.removePane(i); } catch {} }
     this.mainSeries = this.makeMainSeries();
     this.mainSeries.applyOptions({ priceFormat: this.priceFormat() });
     this.mainSeries.attachPrimitive(this.ethShade ||= new EthShade(this));
+    this.mainSeries.attachPrimitive(this.alertMarks ||= new AlertMarks(this));
     this.drawings.attach(this.mainSeries);
     this.shown = this.transform(this.bars);
     this.mainSeries.setData(this.shown.map((b) => this.asSeries(b)));
@@ -309,9 +335,10 @@ class ChartPane {
     for (const a of S.alerts) {
       if (!a.active || a.symbol !== this.info.symbol) continue;
       const line = this.mainSeries.createPriceLine({ price: a.price, color: ALERT_COLOR, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
-        title: `Alert${a.cond === 'up' ? ' ↑' : a.cond === 'down' ? ' ↓' : ''}`, axisLabelColor: ALERT_COLOR, axisLabelTextColor: '#000' });
+        title: '', axisLabelColor: ALERT_COLOR, axisLabelTextColor: '#000' });
       this.alertLines.push({ a, line });
     }
+    this.alertMarks?.requestUpdate?.();
   }
   // the alert line under the pointer (within 4px), if any
   alertAt(e) {
