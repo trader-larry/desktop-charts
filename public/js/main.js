@@ -37,8 +37,22 @@ const DEFAULT_STATE = {
   panes: [],   // one config per chart: { symbol, tf, chartType, indicators }
   sync: { symbol: false, interval: false, crosshair: true, time: false },
 };
+// Several app windows can be open at once (?win=w2 ...). Each window keeps its own charts, layout and the
+// watchlist it shows; everything else (watchlists, drawings, alerts, saved layouts, settings) is shared.
+const WIN = (new URLSearchParams(location.search).get('win') || 'main').replace(/[^\w-]/g, '') || 'main';
+const WKEY = `charts.win.${WIN}`;
+const WIN_FIELDS = ['panes', 'layout', 'active', 'sync', 'layoutName', 'wlName', 'showWatch'];
 let S;
 try { S = { ...DEFAULT_STATE, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { S = { ...DEFAULT_STATE }; }
+S.windows ||= {}; // extra windows: { w2: { name, auto, x, y, w, h, seed } }
+if (WIN !== 'main') {
+  let mine = null; try { mine = JSON.parse(localStorage.getItem(WKEY) || 'null'); } catch {}
+  if (mine) for (const k of WIN_FIELDS) { if (k in mine) S[k] = mine[k]; }
+  else {
+    const seed = S.windows[WIN]?.seed || 'SPY';
+    Object.assign(S, { panes: [{ symbol: seed, tf: 'D', chartType: 'candles', indicators: defaultIndicators() }], layout: '1', active: 0, layoutName: null, showWatch: true, sync: { ...DEFAULT_STATE.sync }, wlName: S.windows[WIN]?.wlName || S.wlName });
+  }
+}
 // Migrate the single-chart state (symbol / tf / chartType / indicators at the top level) to chart #1.
 if (!Array.isArray(S.panes) || !S.panes.length) {
   S.panes = [{ symbol: S.symbol || 'SPY', tf: S.tf || '5m', chartType: S.chartType || 'candles', indicators: Array.isArray(S.indicators) ? S.indicators : defaultIndicators() }];
@@ -58,7 +72,24 @@ S.watchlist = S.watchlists[S.wlName];
 S.wlCols = { last: true, chg: true, pct: true, vol: false, ext: true, ...(S.wlCols || {}) }; // watchlist columns // per indicator type: settings saved with "Save as default"
 let saveT = null;
 let renderSavedBtn = null; // set below
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { S.watchlists[S.wlName] = S.watchlist; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} renderSavedBtn?.(); }, 200); };
+function saveNow() {
+  clearTimeout(saveT); saveT = null;
+  S.watchlists[S.wlName] = S.watchlist;
+  try {
+    if (WIN === 'main') localStorage.setItem(KEY, JSON.stringify(S));
+    else {
+      let stored = {}; try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+      const shared = { ...S }; delete shared.watchlist;
+      for (const k of WIN_FIELDS) { if (k in stored) shared[k] = stored[k]; else delete shared[k]; } // keep the main window's own fields
+      if ('watchlist' in stored) shared.watchlist = stored.watchlist;
+      localStorage.setItem(KEY, JSON.stringify(shared));
+      const mine = {}; for (const k of WIN_FIELDS) mine[k] = S[k];
+      localStorage.setItem(WKEY, JSON.stringify(mine));
+    }
+  } catch (e) { console.warn('save', e); }
+  renderSavedBtn?.();
+}
+const save = () => { clearTimeout(saveT); saveT = setTimeout(saveNow, 200); };
 S.layouts ||= {};          // saved layouts by name: { layout, panes, sync, active }
 if (S.layoutName === undefined) S.layoutName = null; // name of the saved layout that is open (null = not saved yet)
 const symState = (sym) => (S.perSymbol[sym] ||= { drawings: [], indicators: [] });
@@ -875,6 +906,10 @@ document.addEventListener('click', () => $('#savedDD').classList.remove('open'))
 const ALERT_COLOR = '#ff9800';
 const ALERT_COND = { cross: 'Crossing', up: 'Crossing up', down: 'Crossing down' };
 const lastPx = new Map();
+// With several windows open, the first one holds this lock and is the only one that fires alerts;
+// when it closes, the next window takes over.
+let alertLeader = !navigator.locks;
+try { navigator.locks?.request('charts-alert-checker', () => { alertLeader = true; return new Promise(() => {}); }); } catch { alertLeader = true; }
 let alertTab = 'alerts', unseenAlerts = 0, editingAlert = null, alertInit = null;
 const alertSymbols = () => [...new Set(S.alerts.filter((a) => a.active).map((a) => a.symbol))];
 function roundPrice(p, sym) { const ref = quotes.get(sym)?.last ?? p; return +p.toFixed(decimalsFor(ref)); }
@@ -892,6 +927,7 @@ function checkAlerts(sym, p) {
   if (!isFinite(p)) return;
   const prev = lastPx.get(sym); lastPx.set(sym, p);
   if (prev === undefined || prev === p) return;
+  if (!alertLeader) return; // another open window checks alerts, so each alert fires once
   const now = Date.now(); let fired = false;
   for (const a of S.alerts) {
     if (!a.active || a.symbol !== sym) continue;
@@ -1062,11 +1098,125 @@ function hideCtxMenu() { $('#ctxMenu').style.display = 'none'; }
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ctxMenu')) hideCtxMenu(); }, { capture: true });
 window.addEventListener('blur', hideCtxMenu);
 
+// ===================== extra windows =====================
+// "New window" opens another app window with its own charts and watchlist. Windows reopen with the main
+// window next time, at the same size and position.
+const winChan = (() => { try { return new BroadcastChannel('charts-windows'); } catch { return null; } })();
+const openWins = new Set([WIN]);
+winChan?.addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.type === 'who') winChan.postMessage({ type: 'here', id: WIN });
+  if (m.type === 'here' || m.type === 'hello') openWins.add(m.id);
+  if (m.type === 'bye') openWins.delete(m.id);
+  if (m.type === 'close' && m.id === WIN) window.close();
+  if (m.type === 'focus' && m.id === WIN) window.focus();
+  if ((m.type === 'here' || m.type === 'hello' || m.type === 'bye') && $('#layoutDD').classList.contains('open')) renderLayoutMenu();
+});
+winChan?.postMessage({ type: 'hello', id: WIN });
+window.addEventListener('pagehide', () => { saveNow(); winChan?.postMessage({ type: 'bye', id: WIN }); });
+function whoIsOpen(ms = 400) { return new Promise((res) => { winChan?.postMessage({ type: 'who' }); setTimeout(() => res(new Set(openWins)), winChan ? ms : 0); }); }
+function openWindow(id) {
+  const w = S.windows[id]; if (!w) return null;
+  const f = w.w ? `popup,left=${w.x},top=${w.y},width=${w.w},height=${w.h}` : `popup,width=${Math.min(1200, screen.availWidth)},height=${Math.min(800, screen.availHeight)}`;
+  return window.open(`/?win=${encodeURIComponent(id)}`, `charts-${id}`, f);
+}
+function newWindow() {
+  let n = 2; while (S.windows[`w${n}`]) n++;
+  const id = `w${n}`;
+  S.windows[id] = { name: `Window ${n}`, auto: true, seed: active.info.symbol, wlName: S.wlName };
+  saveNow();
+  if (!openWindow(id)) toast('The browser blocked the new window. Allow pop-ups for localhost (icon at the right of the address bar or in the app menu), then try again.', 9000);
+}
+function showWindow(id) {
+  if (id === WIN) return;
+  if (openWins.has(id)) { winChan?.postMessage({ type: 'focus', id }); return; }
+  if (id === 'main') { toast('Open the main window with the start script.', 3000); return; }
+  if (!openWindow(id)) toast('The browser blocked the window. Allow pop-ups for localhost, then try again.', 6000);
+}
+function renameWindow(id) {
+  const w = S.windows[id]; if (!w) return;
+  const n = (prompt('Window name', w.name) || '').trim(); if (!n) return;
+  w.name = n; save(); renderLayoutMenu(); if (id === WIN) renderTopbar();
+}
+function deleteWindow(id) {
+  const w = S.windows[id]; if (!w || !confirm(`Delete "${w.name}"? Its charts are removed and it no longer opens with the app. (Watchlists and drawings stay.)`)) return;
+  delete S.windows[id]; saveNow(); try { localStorage.removeItem(`charts.win.${id}`); } catch {}
+  winChan?.postMessage({ type: 'close', id });
+  if (id === WIN) window.close();
+  renderLayoutMenu();
+}
+function renderWindowsSection(m) {
+  m.append(el('div', { class: 'dd-h' }, 'Windows'));
+  const rows = [['main', 'Main window'], ...Object.entries(S.windows).map(([id, w]) => [id, w.name])];
+  for (const [id, name] of rows) {
+    const here = id === WIN, open = openWins.has(id);
+    const r = el('div', { class: 'saved-row win-row' + (here ? ' on' : ''), title: here ? 'This window' : open ? 'Bring to front' : 'Open this window' },
+      `<span class="nm"></span><span class="meta">${here ? 'this window' : open ? 'open' : 'closed'}</span>${id === 'main' ? '' : '<button class="ren" title="Rename">✎</button><button class="del" title="Delete window">×</button>'}`);
+    r.querySelector('.nm').textContent = name;
+    r.addEventListener('click', (e) => {
+      if (e.target.closest('.ren')) { e.stopPropagation(); renameWindow(id); return; }
+      if (e.target.closest('.del')) { e.stopPropagation(); deleteWindow(id); return; }
+      $('#layoutDD').classList.remove('open'); showWindow(id);
+    });
+    m.append(r);
+  }
+  const b = el('button', { class: 'dd-item', title: 'Open another window with its own charts and watchlist' }, '+ New window');
+  b.addEventListener('click', () => { $('#layoutDD').classList.remove('open'); newWindow(); });
+  m.append(b);
+}
+// remember this window's size and position (the main app window's is remembered by the browser)
+if (WIN !== 'main') {
+  let last = '';
+  const track = () => {
+    const w = S.windows[WIN]; if (!w) return;
+    const b = { x: screenX, y: screenY, w: outerWidth, h: outerHeight }; const k = JSON.stringify(b);
+    if (k !== last) { last = k; Object.assign(w, b); save(); }
+  };
+  addEventListener('resize', track); setInterval(track, 2000);
+}
+// the main window reopens the other windows; if the browser blocks pop-ups, a bar offers to open them
+async function reopenWindows() {
+  const ids = Object.keys(S.windows).filter((id) => S.windows[id].auto !== false);
+  if (!ids.length) return;
+  const here = await whoIsOpen();
+  const blocked = ids.filter((id) => !here.has(id) && !openWindow(id));
+  if (!blocked.length) return;
+  const bar = el('div', { id: 'winBar' });
+  const paint = () => {
+    if (!blocked.length) { bar.remove(); return; }
+    bar.innerHTML = '';
+    const b = el('button', { class: 'btn primary' }, `Open "${S.windows[blocked[0]]?.name || blocked[0]}"${blocked.length > 1 ? ` (+${blocked.length - 1} more)` : ''}`);
+    b.addEventListener('click', () => { openWindow(blocked.shift()); paint(); });
+    const x = el('button', { class: 'x', title: 'Dismiss' }, '×'); x.addEventListener('click', () => bar.remove());
+    bar.append(el('span', {}, 'The browser blocked your other chart windows. To open them automatically next time, allow pop-ups for localhost.'), b, x);
+  };
+  paint(); $('#chartWrap').append(bar);
+}
+// another window changed the shared state: take its changes and refresh what they affect
+window.addEventListener('storage', (e) => {
+  if (e.key !== KEY || !e.newValue) return;
+  let nv; try { nv = JSON.parse(e.newValue); } catch { return; }
+  const changed = new Set();
+  for (const [k, v] of Object.entries(nv)) {
+    if (k === 'watchlist' || (WIN !== 'main' && WIN_FIELDS.includes(k)) || (WIN === 'main' && WIN_FIELDS.includes(k))) continue;
+    if (JSON.stringify(S[k]) !== JSON.stringify(v)) { S[k] = v; changed.add(k); }
+  }
+  if (!changed.size) return;
+  if (changed.has('watchlists') || changed.has('wlCols')) {
+    if (!S.watchlists[S.wlName]) S.wlName = Object.keys(S.watchlists)[0];
+    S.watchlist = S.watchlists[S.wlName]; renderWatchlist(); refreshQuoteSubs();
+  }
+  if (changed.has('perSymbol')) for (const p of panes) if (!p.drawings.creating && !p.drawings.drag) p.drawings.load(p.myDrawings());
+  if (changed.has('alerts') || changed.has('alertLog')) alertsChanged();
+  if (changed.has('windows') && $('#layoutDD').classList.contains('open')) renderLayoutMenu();
+  if (changed.has('layouts')) renderSavedBtn?.();
+});
+
 // ===================== top bar =====================
 function renderTopbar() {
   if (!active) return;
   $('#symbolText').textContent = active.info.symbol;
-  document.title = `${active.info.symbol} · Charts`;
+  document.title = `${active.info.symbol} · ${WIN === 'main' ? 'Charts' : (S.windows[WIN]?.name || 'Charts')}`;
   renderTf(); renderChartType();
 }
 function renderTf() {
@@ -1104,8 +1254,9 @@ function renderLayoutMenu() {
     });
     row.append(cb, el('span', {}, name)); m.append(row);
   }
+  renderWindowsSection(m);
 }
-$('#layoutBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.toggle('open'); });
+$('#layoutBtn').addEventListener('click', (e) => { e.stopPropagation(); openWins.clear(); openWins.add(WIN); winChan?.postMessage({ type: 'who' }); $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.toggle('open'); });
 $('#layoutMenu').addEventListener('click', (e) => e.stopPropagation());
 $('#chartTypeBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#layoutDD').classList.remove('open'); $('#chartTypeDD').classList.toggle('open'); });
 document.addEventListener('click', () => { $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.remove('open'); });
@@ -1414,7 +1565,8 @@ async function boot() {
   feed.onQuote = (q) => { quotes.set(q.symbol, { ...(quotes.get(q.symbol) || {}), ...Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && !Number.isNaN(v))) }); paintQuote(q.symbol); if (q.symbol === active?.info.symbol) renderDetail(); checkAlerts(q.symbol, alertPrice(quotes.get(q.symbol))); };
   applyLayout(S.layout);
   renderSavedBtn(); renderAlertsBtn(); alertsChanged.syms = alertSymbols().join(',');
+  if (WIN === 'main') reopenWindows();
   refreshQuoteSubs();
 }
 boot();
-window.__charts = { chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };
+window.__charts = { WIN, newWindow, saveNow, openWins, chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };

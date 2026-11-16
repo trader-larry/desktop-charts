@@ -247,3 +247,11 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 .ctx-menu { display: none; position: fixed; z-index: 120; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; min-width: 200px; box-shadow: 0 8px 24px #0008; }
 .ctx-menu .dd-item { color: var(--text); white-space: nowrap; }
 .pane.alert-hover, .pane.alert-hover * { cursor: ns-resize !important; }
+
+/* extra windows */
+.win-row .ren { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; visibility: hidden; }
+.win-row:hover .ren { visibility: visible; }
+.win-row .ren:hover { color: #fff; }
+#layoutMenu .dd-item { color: var(--text); }
+#winBar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 45; display: flex; align-items: center; gap: 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px 8px 14px; box-shadow: 0 8px 24px #000a; max-width: 92%; }
+#winBar .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; }
