@@ -1135,6 +1135,14 @@ winChan?.addEventListener('message', (e) => {
 });
 winChan?.postMessage({ type: 'hello', id: WIN });
 window.addEventListener('pagehide', () => { saveNow(); winChan?.postMessage({ type: 'bye', id: WIN }); });
+// Closing the main window closes the other chart windows too (they still reopen with it next time).
+// A reload of the main window says hello again within a moment, so the others wait briefly before closing.
+let mainGoneT = null;
+if (WIN !== 'main') winChan?.addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.type === 'bye' && m.id === 'main') { clearTimeout(mainGoneT); mainGoneT = setTimeout(() => { if (!openWins.has('main')) { saveNow(); window.close(); } }, 2500); }
+  if ((m.type === 'hello' || m.type === 'here') && m.id === 'main') clearTimeout(mainGoneT);
+});
 function whoIsOpen(ms = 400) { return new Promise((res) => { winChan?.postMessage({ type: 'who' }); setTimeout(() => res(new Set(openWins)), winChan ? ms : 0); }); }
 function openWindow(id) {
   const w = S.windows[id]; if (!w) return null;

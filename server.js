@@ -211,4 +211,7 @@ const PORT = Number(process.env.PORT) || loadConfig().port || 8787;
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  Charts running at  http://localhost:${PORT}\n`);
   console.log(isConfigured() ? '  Data: tastytrade (DXLink)\n' : '  Data: DEMO (no tastytrade credentials in config.json yet; add them in the app under Settings)\n');
+  console.log('  Keep this window open while you chart.');
+  console.log('  To stop the app: close this window, or press Ctrl+C here (answer Y if asked "Terminate batch job").\n');
 });
+process.on('SIGINT', () => { console.log('\n  Charts stopped. You can close this window.\n'); process.exit(0); });
