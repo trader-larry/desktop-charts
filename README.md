@@ -64,6 +64,7 @@ Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the fron
 | Reset view | Alt+R or the corners icon |
 | Save image | Camera icon |
 | RTH / ETH | Status bar button (stocks): regular hours only, or include extended hours . Pre-market and after-hours bars are shaded on intraday stock charts (turn off in Settings) |
+| Background and padding | Settings → Display: chart background colour, and chart padding (top and bottom space in %, right space in bars). Default buttons put them back |
 | Watermark / description | Settings → Display: large faint ticker with the company name below it, behind each chart (on by default) |
 | Time zone | Status bar button or Settings |
 

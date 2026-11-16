@@ -29,6 +29,7 @@ ICONS.restore = '<svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M10 14l-7
 
 // ===================== persisted state =====================
 const KEY = 'charts.state.v1';
+const DEFAULT_BG = '#0f0f0f';
 const defaultIndicators = () => [{ id: uid(), type: 'volume', params: defaults('volume') }, { id: uid(), type: 'vpvr', params: defaults('vpvr') }];
 const DEFAULT_STATE = {
   tz: 'local', rth: false, grid: false, showWatch: true,
@@ -63,6 +64,8 @@ delete S.symbol; delete S.tf; delete S.chartType; delete S.indicators;
 S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
+S.chartBg ||= DEFAULT_BG; // chart background colour
+S.margins = { top: 8, bottom: 8, right: 12, ...(S.margins || {}) }; // chart padding: top / bottom in % of the chart height, right in bars
 S.alerts ||= []; S.alertLog ||= []; if (S.alertSound === undefined) S.alertSound = true; // price alerts
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
@@ -201,12 +204,12 @@ class ChartPane {
     const self = this;
     this.chart = createChart(this.host, {
       autoSize: true,
-      layout: { background: { type: 'solid', color: '#0f0f0f' }, textColor: '#b2b5be', fontSize: 12, fontFamily: getComputedStyle(document.body).fontFamily,
+      layout: { background: { type: 'solid', color: S.chartBg }, textColor: '#b2b5be', fontSize: 12, fontFamily: getComputedStyle(document.body).fontFamily,
         panes: { separatorColor: '#262626', separatorHoverColor: '#2962ff33', enableResize: true }, attributionLogo: false }, // credit is in the status bar instead
       grid: { vertLines: { color: '#1a1a1a', visible: S.grid }, horzLines: { color: '#1a1a1a', visible: S.grid } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#787b86', style: LineStyle.Dashed, labelBackgroundColor: '#363a45' }, horzLine: { color: '#787b86', style: LineStyle.Dashed, labelBackgroundColor: '#363a45' } },
-      rightPriceScale: { borderColor: '#262626', scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#262626', rightOffset: 12, barSpacing: 7, timeVisible: true, secondsVisible: false,
+      rightPriceScale: { borderColor: '#262626', scaleMargins: { top: S.margins.top / 100, bottom: S.margins.bottom / 100 } },
+      timeScale: { borderColor: '#262626', rightOffset: S.margins.right, barSpacing: 7, timeVisible: true, secondsVisible: false,
         tickMarkFormatter: (t, type) => fmtTick(t, type, S.tz) },
       localization: { timeFormatter: (t) => fmtCrosshair(t, S.tz, self.tf.sec) },
     });
@@ -433,7 +436,7 @@ class ChartPane {
       return;
     }
     const vis = Math.min(n, this.tf.sec >= 86400 ? 200 : 160);
-    this.chart.timeScale().setVisibleLogicalRange({ from: n - vis, to: n - 1 + 12 });
+    this.chart.timeScale().setVisibleLogicalRange({ from: n - vis, to: n - 1 + S.margins.right });
     this.chart.priceScale('right').applyOptions({ autoScale: true });
   }
 
@@ -1212,6 +1215,7 @@ window.addEventListener('storage', (e) => {
   if (changed.has('alerts') || changed.has('alertLog')) alertsChanged();
   if (changed.has('windows') && $('#layoutDD').classList.contains('open')) renderLayoutMenu();
   if (changed.has('layouts')) renderSavedBtn?.();
+  if (changed.has('chartBg') || changed.has('margins')) applyChartStyle(changed.has('margins'));
 });
 
 // ===================== top bar =====================
@@ -1489,7 +1493,7 @@ async function openSettings() {
   $('#cfgMsg').textContent = '';
   const st = await fetch('/api/status').then((r) => r.json()).catch(() => ({}));
   $('#connInfo').textContent = st.forcedDemo ? 'Started with --demo: using demo data.' : st.mode === 'live' ? `Connected (data level: ${st.level || 'api'}).` : st.configured ? `Credentials saved but connection failed: ${st.error || 'unknown error'}` : 'Not connected. Using demo data.';
-  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
+  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optBg').value = S.chartBg; fillMargins(); $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#tzSelect').innerHTML = TZ_CHOICES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
@@ -1497,6 +1501,24 @@ $('#tzSelect').addEventListener('change', (e) => setTz(e.target.value));
 $('#optRth').addEventListener('change', (e) => setRth(e.target.checked));
 $('#optShade').addEventListener('change', (e) => { S.shadeEth = e.target.checked; save(); for (const p of panes) p.ethShade?.requestUpdate?.(); });
 $('#optWatermark').addEventListener('change', (e) => { S.watermark = e.target.checked; save(); for (const p of panes) p.updateWatermark(); });
+// ---- chart background and padding (Settings → Display) ----
+function applyChartStyle(scrollRight = false) {
+  document.documentElement.style.setProperty('--chart-bg', S.chartBg);
+  for (const p of panes) {
+    p.chart.applyOptions({ layout: { background: { type: 'solid', color: S.chartBg } }, timeScale: { rightOffset: S.margins.right },
+      rightPriceScale: { scaleMargins: { top: S.margins.top / 100, bottom: S.margins.bottom / 100 } } });
+    if (scrollRight) p.chart.timeScale().scrollToPosition(S.margins.right, false);
+  }
+}
+const clampNum = (v, lo, hi, def) => { const n = Number(v); return isFinite(n) && v !== '' ? Math.min(hi, Math.max(lo, n)) : def; };
+$('#optBg').addEventListener('input', (e) => { S.chartBg = e.target.value; save(); applyChartStyle(); });
+$('#optBgReset').addEventListener('click', () => { S.chartBg = DEFAULT_BG; $('#optBg').value = DEFAULT_BG; save(); applyChartStyle(); });
+for (const [id, k, hi] of [['#optMarTop', 'top', 40], ['#optMarBottom', 'bottom', 40], ['#optMarRight', 'right', 200]]) {
+  $(id).addEventListener('input', (e) => { const v = clampNum(e.target.value, 0, hi, null); if (v == null) return; S.margins[k] = v; save(); applyChartStyle(k === 'right'); });
+}
+$('#optMarReset').addEventListener('click', () => { S.margins = { top: 8, bottom: 8, right: 12 }; fillMargins(); save(); applyChartStyle(true); });
+function fillMargins() { $('#optMarTop').value = S.margins.top; $('#optMarBottom').value = S.margins.bottom; $('#optMarRight').value = S.margins.right; }
+document.documentElement.style.setProperty('--chart-bg', S.chartBg);
 $('#optGrid').addEventListener('change', (e) => { S.grid = e.target.checked; save(); for (const p of panes) p.chart.applyOptions({ grid: { vertLines: { visible: S.grid }, horzLines: { visible: S.grid } } }); });
 $('#cfgSave').addEventListener('click', async () => {
   $('#cfgMsg').textContent = 'Connecting…';

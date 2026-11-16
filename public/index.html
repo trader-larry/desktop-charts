@@ -149,6 +149,14 @@
       <label class="row"><input id="optShade" type="checkbox" /> Shade extended hours (pre-market and after-hours) on intraday stock charts</label>
       <label class="row"><input id="optWatermark" type="checkbox" /> Symbol watermark (large faint symbol and description behind the chart)</label>
       <label class="row"><input id="optGrid" type="checkbox" /> Show grid</label>
+      <div class="set-row"><span>Chart background</span><input id="optBg" type="color" /><button class="btn small" id="optBgReset" type="button">Default</button></div>
+      <div class="set-row" title="Space between the candles and the edges of the chart">
+        <span>Chart padding</span>
+        <label class="inl">Top <input id="optMarTop" type="number" min="0" max="40" step="1" />%</label>
+        <label class="inl">Bottom <input id="optMarBottom" type="number" min="0" max="40" step="1" />%</label>
+        <label class="inl">Right <input id="optMarRight" type="number" min="0" max="200" step="1" /> bars</label>
+        <button class="btn small" id="optMarReset" type="button">Default</button>
+      </div>
     </div>
   </div>
 
