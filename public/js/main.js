@@ -47,6 +47,7 @@ delete S.symbol; delete S.tf; delete S.chartType; delete S.indicators;
 S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
+if (S.hiLo === undefined) S.hiLo = true; // High / Low labels of the visible range
 S.alerts ||= []; S.alertLog ||= []; if (S.alertSound === undefined) S.alertSound = true; // price alerts
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
@@ -76,7 +77,8 @@ let currentTool = null;
 // ===================== extended-hours shading =====================
 // Draws a soft background band behind pre-market and after-hours bars (US stocks/ETFs, intraday timeframes),
 // like TradingView's "extended hours" background.
-const ETH_SHADE = 'rgba(41, 98, 255, 0.07)';
+// Same idea as TradingView's defaults: orange tint for pre-market, blue for after-hours.
+const ETH_SHADE = { pre: 'rgba(255, 152, 0, 0.07)', post: 'rgba(41, 98, 255, 0.07)' };
 const nyMinute = (() => {
   const f = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const cache = new Map();
@@ -100,19 +102,18 @@ class EthShade {
     const from = Math.max(0, Math.floor(r.from) - 1), to = Math.min(bars.length - 1, Math.ceil(r.to) + 1);
     const half = (ts.options().barSpacing || 6) / 2;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: sz }) => {
-      ctx.fillStyle = ETH_SHADE;
-      let runStart = null;
+      let runStart = null, runKind = null;
       const flush = (endIdx) => {
         const x0 = ts.logicalToCoordinate(runStart), x1 = ts.logicalToCoordinate(endIdx);
+        ctx.fillStyle = ETH_SHADE[runKind];
         if (x0 != null && x1 != null) ctx.fillRect(Math.floor(x0 - half), 0, Math.ceil(x1 - x0 + 2 * half), sz.height);
       };
       for (let i = from; i <= to; i++) {
         const m = nyMinute(bars[i].time);
-        const eth = m < 570 || m >= 960; // outside 9:30-16:00 New York (bar start time)
-        if (eth && runStart === null) runStart = i;
-        if (!eth && runStart !== null) { flush(i - 1); runStart = null; }
+        const kind = m < 570 ? 'pre' : m >= 960 ? 'post' : null; // outside 9:30-16:00 New York (bar start time)
+        if (kind !== runKind) { if (runKind) flush(i - 1); runStart = kind ? i : null; runKind = kind; }
       }
-      if (runStart !== null) flush(to);
+      if (runKind) flush(to);
     });
   }
 }
@@ -220,7 +221,7 @@ class ChartPane {
 
     this.chart.subscribeCrosshairMove((p) => { this.hoverPrice = p.point && this.mainSeries ? this.mainSeries.coordinateToPrice(p.point.y) : null; this.updateLegendMain(p.time ?? null); syncCrosshair(this, p); });
     this.chart.timeScale().subscribeVisibleTimeRangeChange(() => syncTimeRange(this));
-    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => this.rememberView(r));
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { this.rememberView(r); this.queueHiLo(); });
     this.chart.timeScale().subscribeSizeChange?.(() => setTimeout(() => this.placePaneLegends(), 0));
     this.width = 9999;
     this.ro = new ResizeObserver(() => { this.width = this.host.clientWidth; this.updateLegendMain(undefined); this.updateWatermark(); setTimeout(() => this.placePaneLegends(), 30); }); this.ro.observe(this.host);
@@ -323,7 +324,7 @@ class ChartPane {
       else for (const b of changed) this.mainSeries.update(this.asSeries(b));
       for (const h of this.handles.values()) try { h.update(bars, 'update', changed); } catch (e) { console.error(e); }
     }
-    this.updateLegendMain(undefined);
+    this.updateLegendMain(undefined); this.queueHiLo();
     if (this === active) renderDetail();
   }
 
@@ -381,6 +382,22 @@ class ChartPane {
     } else if (price != null) items.push([`Add alert on ${sym} at ${fmtPrice(price)}…`, () => openAlertDialog({ symbol: sym, price })]);
     items.push(['Reset chart view', () => this.resetView()]);
     showCtxMenu(e.clientX, e.clientY, items);
+  }
+  // ---- High / Low labels for the visible part of the chart (like TradingView's "High and low price labels") ----
+  queueHiLo() { if (this.hiLoQueued) return; this.hiLoQueued = true; requestAnimationFrame(() => { this.hiLoQueued = false; this.updateHiLo(); }); }
+  updateHiLo() {
+    const s = this.mainSeries; if (!s) return;
+    const r = this.chart.timeScale().getVisibleLogicalRange(), bars = this.shown;
+    let hi = -Infinity, lo = Infinity;
+    if (S.hiLo && r && bars.length) {
+      const a = Math.max(0, Math.ceil(r.from)), b = Math.min(bars.length - 1, Math.floor(r.to));
+      for (let i = a; i <= b; i++) { if (bars[i].high > hi) hi = bars[i].high; if (bars[i].low < lo) lo = bars[i].low; }
+    }
+    const show = isFinite(hi) && isFinite(lo);
+    if (!show) { for (const k of ['hiLine', 'loLine']) if (this[k]) { try { s.removePriceLine(this[k]); } catch {} this[k] = null; } return; }
+    const opt = (title, price) => ({ price, title, color: '#787b8680', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, axisLabelColor: '#1e2a4a', axisLabelTextColor: '#d1d4dc' });
+    if (this.hiLine?.series !== s) { this.hiLine = s.createPriceLine(opt('High', hi)); this.hiLine.series = s; } else if (this.hiLine.options().price !== hi) this.hiLine.applyOptions({ price: hi });
+    if (this.loLine?.series !== s) { this.loLine = s.createPriceLine(opt('Low', lo)); this.loLine.series = s; } else if (this.loLine.options().price !== lo) this.loLine.applyOptions({ price: lo });
   }
   viewKey() { return `${this.cfg.id}|${this.tf.id}`; }
   // Remember how far back / ahead of the last bar this chart is zoomed, so it reopens the same way.
@@ -1310,12 +1327,13 @@ async function openSettings() {
   $('#cfgMsg').textContent = '';
   const st = await fetch('/api/status').then((r) => r.json()).catch(() => ({}));
   $('#connInfo').textContent = st.forcedDemo ? 'Started with --demo: using demo data.' : st.mode === 'live' ? `Connected (data level: ${st.level || 'api'}).` : st.configured ? `Credentials saved but connection failed: ${st.error || 'unknown error'}` : 'Not connected. Using demo data.';
-  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
+  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optShade').checked = S.shadeEth; $('#optHiLo').checked = S.hiLo; $('#optWatermark').checked = S.watermark;
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#tzSelect').innerHTML = TZ_CHOICES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
 $('#tzSelect').addEventListener('change', (e) => setTz(e.target.value));
 $('#optRth').addEventListener('change', (e) => setRth(e.target.checked));
+$('#optHiLo').addEventListener('change', (e) => { S.hiLo = e.target.checked; save(); for (const p of panes) p.updateHiLo(); });
 $('#optShade').addEventListener('change', (e) => { S.shadeEth = e.target.checked; save(); for (const p of panes) p.ethShade?.requestUpdate?.(); });
 $('#optWatermark').addEventListener('change', (e) => { S.watermark = e.target.checked; save(); for (const p of panes) p.updateWatermark(); });
 $('#optGrid').addEventListener('change', (e) => { S.grid = e.target.checked; save(); for (const p of panes) p.chart.applyOptions({ grid: { vertLines: { visible: S.grid }, horzLines: { visible: S.grid } } }); });
