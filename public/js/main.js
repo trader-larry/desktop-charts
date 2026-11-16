@@ -19,6 +19,8 @@ const LAYOUTS = [
   { id: '4v', name: '4 charts, columns', r: grid(4, 1) },
   { id: '6', name: '6 charts, 3 × 2', r: grid(3, 2) },
   { id: '8', name: '8 charts, 4 × 2', r: grid(4, 2) },
+  { id: '12', name: '12 charts, 6 × 2', r: grid(6, 2) },
+  { id: '24', name: '24 charts, 12 × 2', r: grid(12, 2) },
 ];
 const layoutById = (id) => LAYOUTS.find((l) => l.id === id) || LAYOUTS[0];
 const layoutIcon = (l) => `<svg viewBox="0 0 24 24" class="lay-ic">${l.r.map(([x, y, w, h]) => `<rect x="${3 + x * 18 + 0.8}" y="${4 + y * 16 + 0.8}" width="${w * 18 - 1.6}" height="${h * 16 - 1.6}" rx="1"/>`).join('')}</svg>`;
@@ -27,6 +29,7 @@ ICONS.restore = '<svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M10 14l-7
 
 // ===================== persisted state =====================
 const KEY = 'charts.state.v1';
+const DEFAULT_BG = '#0f0f0f';
 const defaultIndicators = () => [{ id: uid(), type: 'volume', params: defaults('volume') }, { id: uid(), type: 'vpvr', params: defaults('vpvr') }];
 const DEFAULT_STATE = {
   tz: 'local', rth: false, grid: false, showWatch: true,
@@ -37,8 +40,22 @@ const DEFAULT_STATE = {
   panes: [],   // one config per chart: { symbol, tf, chartType, indicators }
   sync: { symbol: false, interval: false, crosshair: true, time: false },
 };
+// Several app windows can be open at once (?win=w2 ...). Each window keeps its own charts, layout and the
+// watchlist it shows; everything else (watchlists, drawings, alerts, saved layouts, settings) is shared.
+const WIN = (new URLSearchParams(location.search).get('win') || 'main').replace(/[^\w-]/g, '') || 'main';
+const WKEY = `charts.win.${WIN}`;
+const WIN_FIELDS = ['panes', 'layout', 'active', 'sync', 'layoutName', 'wlName', 'showWatch'];
 let S;
 try { S = { ...DEFAULT_STATE, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { S = { ...DEFAULT_STATE }; }
+S.windows ||= {}; // extra windows: { w2: { name, auto, x, y, w, h, seed } }
+if (WIN !== 'main') {
+  let mine = null; try { mine = JSON.parse(localStorage.getItem(WKEY) || 'null'); } catch {}
+  if (mine) for (const k of WIN_FIELDS) { if (k in mine) S[k] = mine[k]; }
+  else {
+    const seed = S.windows[WIN]?.seed || 'SPY';
+    Object.assign(S, { panes: [{ symbol: seed, tf: 'D', chartType: 'candles', indicators: defaultIndicators() }], layout: '1', active: 0, layoutName: null, showWatch: true, sync: { ...DEFAULT_STATE.sync }, wlName: S.windows[WIN]?.wlName || S.wlName });
+  }
+}
 // Migrate the single-chart state (symbol / tf / chartType / indicators at the top level) to chart #1.
 if (!Array.isArray(S.panes) || !S.panes.length) {
   S.panes = [{ symbol: S.symbol || 'SPY', tf: S.tf || '5m', chartType: S.chartType || 'candles', indicators: Array.isArray(S.indicators) ? S.indicators : defaultIndicators() }];
@@ -47,6 +64,8 @@ delete S.symbol; delete S.tf; delete S.chartType; delete S.indicators;
 S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
+S.chartBg ||= DEFAULT_BG; // chart background colour
+S.margins = { top: 8, bottom: 8, right: 12, ...(S.margins || {}) }; // chart padding: top / bottom in % of the chart height, right in bars
 S.alerts ||= []; S.alertLog ||= []; if (S.alertSound === undefined) S.alertSound = true; // price alerts
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
 if (S.watermark === undefined) S.watermark = true;  // big faint symbol + description behind the candles
@@ -58,7 +77,24 @@ S.watchlist = S.watchlists[S.wlName];
 S.wlCols = { last: true, chg: true, pct: true, vol: false, ext: true, ...(S.wlCols || {}) }; // watchlist columns // per indicator type: settings saved with "Save as default"
 let saveT = null;
 let renderSavedBtn = null; // set below
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { S.watchlists[S.wlName] = S.watchlist; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} renderSavedBtn?.(); }, 200); };
+function saveNow() {
+  clearTimeout(saveT); saveT = null;
+  S.watchlists[S.wlName] = S.watchlist;
+  try {
+    if (WIN === 'main') localStorage.setItem(KEY, JSON.stringify(S));
+    else {
+      let stored = {}; try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+      const shared = { ...S }; delete shared.watchlist;
+      for (const k of WIN_FIELDS) { if (k in stored) shared[k] = stored[k]; else delete shared[k]; } // keep the main window's own fields
+      if ('watchlist' in stored) shared.watchlist = stored.watchlist;
+      localStorage.setItem(KEY, JSON.stringify(shared));
+      const mine = {}; for (const k of WIN_FIELDS) mine[k] = S[k];
+      localStorage.setItem(WKEY, JSON.stringify(mine));
+    }
+  } catch (e) { console.warn('save', e); }
+  renderSavedBtn?.();
+}
+const save = () => { clearTimeout(saveT); saveT = setTimeout(saveNow, 200); };
 S.layouts ||= {};          // saved layouts by name: { layout, panes, sync, active }
 if (S.layoutName === undefined) S.layoutName = null; // name of the saved layout that is open (null = not saved yet)
 const symState = (sym) => (S.perSymbol[sym] ||= { drawings: [], indicators: [] });
@@ -168,12 +204,12 @@ class ChartPane {
     const self = this;
     this.chart = createChart(this.host, {
       autoSize: true,
-      layout: { background: { type: 'solid', color: '#0f0f0f' }, textColor: '#b2b5be', fontSize: 12, fontFamily: getComputedStyle(document.body).fontFamily,
+      layout: { background: { type: 'solid', color: S.chartBg }, textColor: '#b2b5be', fontSize: 12, fontFamily: getComputedStyle(document.body).fontFamily,
         panes: { separatorColor: '#262626', separatorHoverColor: '#2962ff33', enableResize: true }, attributionLogo: false }, // credit is in the status bar instead
       grid: { vertLines: { color: '#1a1a1a', visible: S.grid }, horzLines: { color: '#1a1a1a', visible: S.grid } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#787b86', style: LineStyle.Dashed, labelBackgroundColor: '#363a45' }, horzLine: { color: '#787b86', style: LineStyle.Dashed, labelBackgroundColor: '#363a45' } },
-      rightPriceScale: { borderColor: '#262626', scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#262626', rightOffset: 12, barSpacing: 7, timeVisible: true, secondsVisible: false,
+      rightPriceScale: { borderColor: '#262626', scaleMargins: { top: S.margins.top / 100, bottom: S.margins.bottom / 100 } },
+      timeScale: { borderColor: '#262626', rightOffset: S.margins.right, barSpacing: 7, timeVisible: true, secondsVisible: false,
         tickMarkFormatter: (t, type) => fmtTick(t, type, S.tz) },
       localization: { timeFormatter: (t) => fmtCrosshair(t, S.tz, self.tf.sec) },
     });
@@ -309,7 +345,11 @@ class ChartPane {
       this.mainSeries.applyOptions({ priceFormat: this.priceFormat() });
       this.mainSeries.setData(this.shown.map((b) => this.asSeries(b)));
       for (const h of this.handles.values()) try { h.update(this.bars, 'reset'); } catch (e) { console.error(e); }
-      if (first) { this.resetView(true); this.needFit = false; }
+      if (first) {
+        this.resetView(true); this.needFit = false;
+        // with date-range sync on, a chart that finishes loading lines up with the active chart
+        if (S.sync.time && active && active !== this && active.bars.length) syncTimeRange(active);
+      }
       this.drawings.redraw();
     } else {
       const bars = this.bars; const changed = [];
@@ -395,12 +435,14 @@ class ChartPane {
     const n = this.bars.length; if (!n) return;
     const v = useSaved && S.views[this.viewKey()];
     if (v && v.back > 1 && isFinite(v.ahead)) {
-      this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - v.back, to: n - 1 + v.ahead });
+      // at the latest bar: use the right padding from Settings; scrolled back in history: restore exactly
+      const ahead = v.ahead > 0 ? S.margins.right : v.ahead;
+      this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - v.back, to: n - 1 + ahead });
       this.chart.priceScale('right').applyOptions({ autoScale: true });
       return;
     }
     const vis = Math.min(n, this.tf.sec >= 86400 ? 200 : 160);
-    this.chart.timeScale().setVisibleLogicalRange({ from: n - vis, to: n - 1 + 12 });
+    this.chart.timeScale().setVisibleLogicalRange({ from: n - vis, to: n - 1 + S.margins.right });
     this.chart.priceScale('right').applyOptions({ autoScale: true });
   }
 
@@ -485,8 +527,7 @@ class ChartPane {
     if (S.watermark) {
       const h = this.host.clientHeight || 400, w = this.host.clientWidth || 600;
       const big = Math.round(Math.max(28, Math.min(96, Math.min(h / 5, w / 7))));
-      const tfName = { D: '1D', W: '1W' }[this.tf.id] || this.tf.id;
-      lines.push({ text: `${this.info.symbol}, ${tfName}`, color: 'rgba(178, 181, 190, 0.12)', fontSize: big, fontStyle: '600' });
+      lines.push({ text: this.info.symbol, color: 'rgba(178, 181, 190, 0.12)', fontSize: big, fontStyle: '600' });
       const ds = this.description(); if (ds) lines.push({ text: ds.length > 40 ? ds.slice(0, 38).trim() + '…' : ds, color: 'rgba(178, 181, 190, 0.12)', fontSize: Math.round(big * 0.32) });
     }
     try {
@@ -656,10 +697,20 @@ function syncCrosshair(src, p) {
 }
 function syncTimeRange(src) {
   if (syncing || !S.sync.time || src !== active || panes.length < 2) return;
-  const r = src.chart.timeScale().getVisibleRange(); if (!r) return;
+  // Line the charts up by the time at their left edge. When the active chart is at the latest bar, every chart
+  // also ends at its latest bar with the right padding from Settings (a plain time range would drop that space).
+  const r = src.chart.timeScale().getVisibleLogicalRange(); const n = src.bars.length; if (!r || !n) return;
+  const live = r.to > n - 1 + 0.5;
+  const tFrom = src.coords.logicalToTime(r.from), tTo = src.coords.logicalToTime(r.to);
   syncing = true;
-  try { for (const o of panes) if (o !== src && o.bars.length) { try { o.chart.timeScale().setVisibleRange(r); } catch {} } }
-  finally { syncing = false; }
+  try {
+    for (const o of panes) {
+      if (o === src || !o.bars.length) continue;
+      const m = o.bars.length, from = o.coords.timeToLogical(tFrom);
+      const to = live ? m - 1 + S.margins.right : o.coords.timeToLogical(tTo);
+      if (isFinite(from) && isFinite(to) && to > from + 1) { try { o.chart.timeScale().setVisibleLogicalRange({ from, to }); } catch {} }
+    }
+  } finally { syncing = false; }
 }
 
 // ===================== indicators dialog =====================
@@ -779,6 +830,23 @@ function paintTools(t) {
   $$('#toolbar [data-tool]').forEach((b) => { if (!['magnet', 'lock', 'hide', 'trash'].includes(b.dataset.tool)) b.classList.toggle('on', (b.dataset.tool === 'cursor' && !t) || b.dataset.tool === t); });
 }
 
+// The drawing toolbar scrolls without a scrollbar; small arrows appear when tools are hidden above or below.
+{
+  const mk = (dir) => el('button', { class: `tb-scroll tbs-${dir}`, title: dir === 'up' ? 'More tools above' : 'More tools below',
+    onclick: () => toolbar.scrollBy({ top: (dir === 'up' ? -1 : 1) * Math.max(80, toolbar.clientHeight * 0.6), behavior: 'smooth' }) }, `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${dir === 'up' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}"/></svg>`);
+  const up = mk('up'), down = mk('down');
+  toolbar.prepend(up); toolbar.append(down);
+  const paint = () => {
+    const over = toolbar.scrollHeight - toolbar.clientHeight > (toolbar.classList.contains('over') ? 1 - 36 : 1);
+    toolbar.classList.toggle('over', over);
+    up.classList.toggle('show', over && toolbar.scrollTop > 1);
+    down.classList.toggle('show', over && toolbar.scrollTop + toolbar.clientHeight < toolbar.scrollHeight - 1);
+  };
+  toolbar.addEventListener('scroll', paint, { passive: true });
+  new ResizeObserver(paint).observe(toolbar);
+  setTimeout(paint, 0);
+}
+
 // ===================== saved layouts =====================
 // Everything is still auto-saved for next time; named layouts let you keep several setups and switch between them.
 const snapshot = () => clone({ layout: S.layout, panes: S.panes, sync: S.sync, active: S.active });
@@ -859,6 +927,10 @@ document.addEventListener('click', () => $('#savedDD').classList.remove('open'))
 const ALERT_COLOR = '#ff9800';
 const ALERT_COND = { cross: 'Crossing', up: 'Crossing up', down: 'Crossing down' };
 const lastPx = new Map();
+// With several windows open, the first one holds this lock and is the only one that fires alerts;
+// when it closes, the next window takes over.
+let alertLeader = !navigator.locks;
+try { navigator.locks?.request('charts-alert-checker', () => { alertLeader = true; return new Promise(() => {}); }); } catch { alertLeader = true; }
 let alertTab = 'alerts', unseenAlerts = 0, editingAlert = null, alertInit = null;
 const alertSymbols = () => [...new Set(S.alerts.filter((a) => a.active).map((a) => a.symbol))];
 function roundPrice(p, sym) { const ref = quotes.get(sym)?.last ?? p; return +p.toFixed(decimalsFor(ref)); }
@@ -876,6 +948,7 @@ function checkAlerts(sym, p) {
   if (!isFinite(p)) return;
   const prev = lastPx.get(sym); lastPx.set(sym, p);
   if (prev === undefined || prev === p) return;
+  if (!alertLeader) return; // another open window checks alerts, so each alert fires once
   const now = Date.now(); let fired = false;
   for (const a of S.alerts) {
     if (!a.active || a.symbol !== sym) continue;
@@ -1046,11 +1119,134 @@ function hideCtxMenu() { $('#ctxMenu').style.display = 'none'; }
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ctxMenu')) hideCtxMenu(); }, { capture: true });
 window.addEventListener('blur', hideCtxMenu);
 
+// ===================== extra windows =====================
+// "New window" opens another app window with its own charts and watchlist. Windows reopen with the main
+// window next time, at the same size and position.
+const winChan = (() => { try { return new BroadcastChannel('charts-windows'); } catch { return null; } })();
+const openWins = new Set([WIN]);
+winChan?.addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.type === 'who') winChan.postMessage({ type: 'here', id: WIN });
+  if (m.type === 'here' || m.type === 'hello') openWins.add(m.id);
+  if (m.type === 'bye') openWins.delete(m.id);
+  if (m.type === 'close' && m.id === WIN) window.close();
+  if (m.type === 'focus' && m.id === WIN) window.focus();
+  if ((m.type === 'here' || m.type === 'hello' || m.type === 'bye') && $('#layoutDD').classList.contains('open')) renderLayoutMenu();
+});
+winChan?.postMessage({ type: 'hello', id: WIN });
+window.addEventListener('pagehide', () => { saveNow(); winChan?.postMessage({ type: 'bye', id: WIN }); });
+// Closing the main window closes the other chart windows too (they still reopen with it next time).
+// A reload of the main window says hello again within a moment, so the others wait briefly before closing.
+let mainGoneT = null;
+if (WIN !== 'main') winChan?.addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.type === 'bye' && m.id === 'main') { clearTimeout(mainGoneT); mainGoneT = setTimeout(() => { if (!openWins.has('main')) { saveNow(); window.close(); } }, 2500); }
+  if ((m.type === 'hello' || m.type === 'here') && m.id === 'main') clearTimeout(mainGoneT);
+});
+function whoIsOpen(ms = 400) { return new Promise((res) => { winChan?.postMessage({ type: 'who' }); setTimeout(() => res(new Set(openWins)), winChan ? ms : 0); }); }
+function openWindow(id) {
+  const w = S.windows[id]; if (!w) return null;
+  const f = w.w ? `popup,left=${w.x},top=${w.y},width=${w.w},height=${w.h}` : `popup,width=${Math.min(1200, screen.availWidth)},height=${Math.min(800, screen.availHeight)}`;
+  return window.open(`/?win=${encodeURIComponent(id)}`, `charts-${id}`, f);
+}
+function newWindow() {
+  let n = 2; while (S.windows[`w${n}`]) n++;
+  const id = `w${n}`;
+  S.windows[id] = { name: `Window ${n}`, auto: true, seed: active.info.symbol, wlName: S.wlName };
+  saveNow();
+  if (!openWindow(id)) toast('The browser blocked the new window. Allow pop-ups for localhost (icon at the right of the address bar or in the app menu), then try again.', 9000);
+}
+function showWindow(id) {
+  if (id === WIN) return;
+  if (openWins.has(id)) { winChan?.postMessage({ type: 'focus', id }); return; }
+  if (id === 'main') { toast('Open the main window with the start script.', 3000); return; }
+  if (!openWindow(id)) toast('The browser blocked the window. Allow pop-ups for localhost, then try again.', 6000);
+}
+function renameWindow(id) {
+  const w = S.windows[id]; if (!w) return;
+  const n = (prompt('Window name', w.name) || '').trim(); if (!n) return;
+  w.name = n; save(); renderLayoutMenu(); if (id === WIN) renderTopbar();
+}
+function deleteWindow(id) {
+  const w = S.windows[id]; if (!w || !confirm(`Delete "${w.name}"? Its charts are removed and it no longer opens with the app. (Watchlists and drawings stay.)`)) return;
+  delete S.windows[id]; saveNow(); try { localStorage.removeItem(`charts.win.${id}`); } catch {}
+  winChan?.postMessage({ type: 'close', id });
+  if (id === WIN) window.close();
+  renderLayoutMenu();
+}
+function renderWindowsSection(m) {
+  m.append(el('div', { class: 'dd-h' }, 'Windows'));
+  const rows = [['main', 'Main window'], ...Object.entries(S.windows).map(([id, w]) => [id, w.name])];
+  for (const [id, name] of rows) {
+    const here = id === WIN, open = openWins.has(id);
+    const r = el('div', { class: 'saved-row win-row' + (here ? ' on' : ''), title: here ? 'This window' : open ? 'Bring to front' : 'Open this window' },
+      `<span class="nm"></span><span class="meta">${here ? 'this window' : open ? 'open' : 'closed'}</span>${id === 'main' ? '' : '<button class="ren" title="Rename">✎</button><button class="del" title="Delete window">×</button>'}`);
+    r.querySelector('.nm').textContent = name;
+    r.addEventListener('click', (e) => {
+      if (e.target.closest('.ren')) { e.stopPropagation(); renameWindow(id); return; }
+      if (e.target.closest('.del')) { e.stopPropagation(); deleteWindow(id); return; }
+      $('#layoutDD').classList.remove('open'); showWindow(id);
+    });
+    m.append(r);
+  }
+  const b = el('button', { class: 'dd-item', title: 'Open another window with its own charts and watchlist' }, '+ New window');
+  b.addEventListener('click', () => { $('#layoutDD').classList.remove('open'); newWindow(); });
+  m.append(b);
+}
+// remember this window's size and position (the main app window's is remembered by the browser)
+if (WIN !== 'main') {
+  let last = '';
+  const track = () => {
+    const w = S.windows[WIN]; if (!w) return;
+    const b = { x: screenX, y: screenY, w: outerWidth, h: outerHeight }; const k = JSON.stringify(b);
+    if (k !== last) { last = k; Object.assign(w, b); save(); }
+  };
+  addEventListener('resize', track); setInterval(track, 2000);
+}
+// the main window reopens the other windows; if the browser blocks pop-ups, a bar offers to open them
+async function reopenWindows() {
+  const ids = Object.keys(S.windows).filter((id) => S.windows[id].auto !== false);
+  if (!ids.length) return;
+  const here = await whoIsOpen();
+  const blocked = ids.filter((id) => !here.has(id) && !openWindow(id));
+  if (!blocked.length) return;
+  const bar = el('div', { id: 'winBar' });
+  const paint = () => {
+    if (!blocked.length) { bar.remove(); return; }
+    bar.innerHTML = '';
+    const b = el('button', { class: 'btn primary' }, `Open "${S.windows[blocked[0]]?.name || blocked[0]}"${blocked.length > 1 ? ` (+${blocked.length - 1} more)` : ''}`);
+    b.addEventListener('click', () => { openWindow(blocked.shift()); paint(); });
+    const x = el('button', { class: 'x', title: 'Dismiss' }, '×'); x.addEventListener('click', () => bar.remove());
+    bar.append(el('span', {}, 'The browser blocked your other chart windows. To open them automatically next time, allow pop-ups for localhost.'), b, x);
+  };
+  paint(); $('#chartWrap').append(bar);
+}
+// another window changed the shared state: take its changes and refresh what they affect
+window.addEventListener('storage', (e) => {
+  if (e.key !== KEY || !e.newValue) return;
+  let nv; try { nv = JSON.parse(e.newValue); } catch { return; }
+  const changed = new Set();
+  for (const [k, v] of Object.entries(nv)) {
+    if (k === 'watchlist' || (WIN !== 'main' && WIN_FIELDS.includes(k)) || (WIN === 'main' && WIN_FIELDS.includes(k))) continue;
+    if (JSON.stringify(S[k]) !== JSON.stringify(v)) { S[k] = v; changed.add(k); }
+  }
+  if (!changed.size) return;
+  if (changed.has('watchlists') || changed.has('wlCols')) {
+    if (!S.watchlists[S.wlName]) S.wlName = Object.keys(S.watchlists)[0];
+    S.watchlist = S.watchlists[S.wlName]; renderWatchlist(); refreshQuoteSubs();
+  }
+  if (changed.has('perSymbol')) for (const p of panes) if (!p.drawings.creating && !p.drawings.drag) p.drawings.load(p.myDrawings());
+  if (changed.has('alerts') || changed.has('alertLog')) alertsChanged();
+  if (changed.has('windows') && $('#layoutDD').classList.contains('open')) renderLayoutMenu();
+  if (changed.has('layouts')) renderSavedBtn?.();
+  if (changed.has('chartBg') || changed.has('margins')) applyChartStyle(changed.has('margins'));
+});
+
 // ===================== top bar =====================
 function renderTopbar() {
   if (!active) return;
   $('#symbolText').textContent = active.info.symbol;
-  document.title = `${active.info.symbol} · Charts`;
+  document.title = `${active.info.symbol} · ${WIN === 'main' ? 'Charts' : (S.windows[WIN]?.name || 'Charts')}`;
   renderTf(); renderChartType();
 }
 function renderTf() {
@@ -1088,8 +1284,9 @@ function renderLayoutMenu() {
     });
     row.append(cb, el('span', {}, name)); m.append(row);
   }
+  renderWindowsSection(m);
 }
-$('#layoutBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.toggle('open'); });
+$('#layoutBtn').addEventListener('click', (e) => { e.stopPropagation(); openWins.clear(); openWins.add(WIN); winChan?.postMessage({ type: 'who' }); $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.toggle('open'); });
 $('#layoutMenu').addEventListener('click', (e) => e.stopPropagation());
 $('#chartTypeBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#layoutDD').classList.remove('open'); $('#chartTypeDD').classList.toggle('open'); });
 document.addEventListener('click', () => { $('#chartTypeDD').classList.remove('open'); $('#layoutDD').classList.remove('open'); });
@@ -1131,8 +1328,18 @@ $('#shotBtn').addEventListener('click', () => {
   const c = chartImage(active);
   c.toBlob((b) => { const a = el('a', { href: URL.createObjectURL(b), download: `${active.info.symbol.replace(/\W/g, '')}_${active.tf.id}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.png` }); a.click(); });
 });
-$('#watchToggle').addEventListener('click', () => { S.showWatch = !S.showWatch; save(); $('#app').classList.toggle('no-watch', !S.showWatch); });
-$('#app').classList.toggle('no-watch', !S.showWatch);
+// The watchlist panel can be collapsed (remembered per window): » in its header, the list button in the top bar,
+// or the tab at the right edge of the charts to bring it back.
+function setWatch(show) {
+  S.showWatch = show; save();
+  $('#app').classList.toggle('no-watch', !show);
+  $('#watchToggle').classList.toggle('on', show);
+  $('#watchToggle').title = show ? 'Hide the watchlist' : 'Show the watchlist';
+}
+$('#watchToggle').addEventListener('click', () => setWatch(!S.showWatch));
+$('#wlCollapse').addEventListener('click', () => setWatch(false));
+$('#wlExpand').addEventListener('click', () => setWatch(true));
+setWatch(S.showWatch !== false);
 
 // ===================== symbol search =====================
 let symMode = 'load';
@@ -1310,7 +1517,7 @@ async function openSettings() {
   $('#cfgMsg').textContent = '';
   const st = await fetch('/api/status').then((r) => r.json()).catch(() => ({}));
   $('#connInfo').textContent = st.forcedDemo ? 'Started with --demo: using demo data.' : st.mode === 'live' ? `Connected (data level: ${st.level || 'api'}).` : st.configured ? `Credentials saved but connection failed: ${st.error || 'unknown error'}` : 'Not connected. Using demo data.';
-  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
+  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optBg').value = S.chartBg; fillMargins(); $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#tzSelect').innerHTML = TZ_CHOICES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
@@ -1318,6 +1525,24 @@ $('#tzSelect').addEventListener('change', (e) => setTz(e.target.value));
 $('#optRth').addEventListener('change', (e) => setRth(e.target.checked));
 $('#optShade').addEventListener('change', (e) => { S.shadeEth = e.target.checked; save(); for (const p of panes) p.ethShade?.requestUpdate?.(); });
 $('#optWatermark').addEventListener('change', (e) => { S.watermark = e.target.checked; save(); for (const p of panes) p.updateWatermark(); });
+// ---- chart background and padding (Settings → Display) ----
+function applyChartStyle(scrollRight = false) {
+  document.documentElement.style.setProperty('--chart-bg', S.chartBg);
+  for (const p of panes) {
+    p.chart.applyOptions({ layout: { background: { type: 'solid', color: S.chartBg } }, timeScale: { rightOffset: S.margins.right },
+      rightPriceScale: { scaleMargins: { top: S.margins.top / 100, bottom: S.margins.bottom / 100 } } });
+    if (scrollRight) p.chart.timeScale().scrollToPosition(S.margins.right, false);
+  }
+}
+const clampNum = (v, lo, hi, def) => { const n = Number(v); return isFinite(n) && v !== '' ? Math.min(hi, Math.max(lo, n)) : def; };
+$('#optBg').addEventListener('input', (e) => { S.chartBg = e.target.value; save(); applyChartStyle(); });
+$('#optBgReset').addEventListener('click', () => { S.chartBg = DEFAULT_BG; $('#optBg').value = DEFAULT_BG; save(); applyChartStyle(); });
+for (const [id, k, hi] of [['#optMarTop', 'top', 40], ['#optMarBottom', 'bottom', 40], ['#optMarRight', 'right', 200]]) {
+  $(id).addEventListener('input', (e) => { const v = clampNum(e.target.value, 0, hi, null); if (v == null) return; S.margins[k] = v; save(); applyChartStyle(k === 'right'); });
+}
+$('#optMarReset').addEventListener('click', () => { S.margins = { top: 8, bottom: 8, right: 12 }; fillMargins(); save(); applyChartStyle(true); });
+function fillMargins() { $('#optMarTop').value = S.margins.top; $('#optMarBottom').value = S.margins.bottom; $('#optMarRight').value = S.margins.right; }
+document.documentElement.style.setProperty('--chart-bg', S.chartBg);
 $('#optGrid').addEventListener('change', (e) => { S.grid = e.target.checked; save(); for (const p of panes) p.chart.applyOptions({ grid: { vertLines: { visible: S.grid }, horzLines: { visible: S.grid } } }); });
 $('#cfgSave').addEventListener('click', async () => {
   $('#cfgMsg').textContent = 'Connecting…';
@@ -1398,7 +1623,8 @@ async function boot() {
   feed.onQuote = (q) => { quotes.set(q.symbol, { ...(quotes.get(q.symbol) || {}), ...Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && !Number.isNaN(v))) }); paintQuote(q.symbol); if (q.symbol === active?.info.symbol) renderDetail(); checkAlerts(q.symbol, alertPrice(quotes.get(q.symbol))); };
   applyLayout(S.layout);
   renderSavedBtn(); renderAlertsBtn(); alertsChanged.syms = alertSymbols().join(',');
+  if (WIN === 'main') reopenWindows();
   refreshQuoteSubs();
 }
 boot();
-window.__charts = { chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };
+window.__charts = { WIN, newWindow, saveNow, openWins, chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };

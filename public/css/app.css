@@ -40,14 +40,21 @@ code { background: var(--panel2); padding: 1px 4px; border-radius: 3px; }
 .dd-item:hover { background: var(--hover); }
 .dd-item.on { color: #fff; background: var(--active); }
 
-#toolbar { grid-area: tools; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; overflow-y: auto; }
+#toolbar { grid-area: tools; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; overflow-y: auto; scrollbar-width: none; }
+#toolbar::-webkit-scrollbar { display: none; }
+.tb-scroll { position: sticky; z-index: 2; flex: none; width: 100%; height: 18px; border: 0; padding: 0; cursor: pointer; color: var(--muted); font-size: 12px; line-height: 18px; background: var(--panel); visibility: hidden; display: none; }
+#toolbar.over .tb-scroll { display: flex; align-items: center; justify-content: center; }
+.tb-scroll.tbs-up { top: -6px; margin-top: -6px; border-bottom: 1px solid var(--border); }
+.tb-scroll.tbs-down { bottom: -6px; margin-bottom: -6px; border-top: 1px solid var(--border); }
+.tb-scroll.show { visibility: visible; }
+.tb-scroll:hover { color: #fff; background: var(--hover); }
 #toolbar .tb-btn { padding: 6px; color: var(--text); }
 #toolbar .tb-btn.on { color: #fff; background: #1e3a8a; }
 #toolbar .tsep { width: 26px; height: 1px; background: var(--border); margin: 5px 0; }
 
 #chartWrap { grid-area: chart; position: relative; min-width: 0; min-height: 0; }
 #panes { position: absolute; inset: 0; background: #2e2e2e; }
-.pane { position: absolute; background: var(--bg); overflow: hidden; }
+.pane { position: absolute; background: var(--chart-bg, var(--bg)); overflow: hidden; }
 .chart-host { position: absolute; inset: 0; }
 .pane.tool-active .chart-host { cursor: crosshair; }
 #panes.multi .pane.active::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--accent); pointer-events: none; z-index: 26; }
@@ -240,3 +247,25 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 .ctx-menu { display: none; position: fixed; z-index: 120; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; min-width: 200px; box-shadow: 0 8px 24px #0008; }
 .ctx-menu .dd-item { color: var(--text); white-space: nowrap; }
 .pane.alert-hover, .pane.alert-hover * { cursor: ns-resize !important; }
+
+/* extra windows */
+.win-row .ren { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; visibility: hidden; }
+.win-row:hover .ren { visibility: visible; }
+.win-row .ren:hover { color: #fff; }
+#layoutMenu .dd-item { color: var(--text); }
+#winBar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 45; display: flex; align-items: center; gap: 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px 8px 14px; box-shadow: 0 8px 24px #000a; max-width: 92%; }
+#winBar .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; }
+
+/* collapsible watchlist */
+#wlExpand { display: none; position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 35; width: 16px; height: 56px; padding: 0; border: 1px solid var(--border); border-right: 0; border-radius: 6px 0 0 6px; background: var(--panel2); color: var(--muted); cursor: pointer; align-items: center; justify-content: center; }
+#wlExpand:hover { color: #fff; background: var(--hover); }
+#app.no-watch #wlExpand { display: flex; }
+#watchToggle.on { color: #fff; }
+
+/* chart background / padding settings */
+.set-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--text); }
+.set-row > span:first-child { min-width: 120px; }
+.set-body label.inl { flex-direction: row; align-items: center; gap: 4px; color: var(--muted); }
+.set-row input[type=number] { width: 56px; background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 4px 6px; border-radius: 4px; font: inherit; }
+.set-row input[type=color] { width: 40px; height: 26px; border: 1px solid var(--border); background: none; border-radius: 4px; cursor: pointer; }
+.btn.small { padding: 3px 10px; font-size: 12px; }

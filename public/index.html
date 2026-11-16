@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Charts</title>
+  <!-- dark title bar for the app window (Chrome / Edge) -->
+  <meta name="theme-color" content="#131313" />
+  <meta name="color-scheme" content="dark" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
@@ -48,6 +53,7 @@
       <div id="panes"></div>
       <div id="toast" class="hidden"></div>
       <div id="alertPops"></div>
+      <button id="wlExpand" title="Show the watchlist"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6l-6 6 6 6M11 6l-6 6 6 6"/></svg></button>
     </main>
 
     <aside id="watchlist">
@@ -56,6 +62,7 @@
           <div class="dd-menu" id="wlListMenu"></div></span>
         <span class="wl-acts">
           <button class="tb-btn icon-btn small" id="wlAdd" title="Add symbol"><span class="ic" data-icon="plus"></span></button>
+          <button class="tb-btn icon-btn small" id="wlCollapse" title="Collapse the watchlist"><span class="ic"><svg viewBox="0 0 24 24"><path d="M7 6l6 6-6 6M13 6l6 6-6 6"/></svg></span></button>
           <span class="dropdown right" id="wlDD"><button class="tb-btn icon-btn small" id="wlMenuBtn" title="Watchlist options"><span class="ic" data-icon="dots"></span></button>
             <div class="dd-menu" id="wlMenu"></div></span>
         </span>
@@ -147,6 +154,14 @@
       <label class="row"><input id="optShade" type="checkbox" /> Shade extended hours (pre-market and after-hours) on intraday stock charts</label>
       <label class="row"><input id="optWatermark" type="checkbox" /> Symbol watermark (large faint symbol and description behind the chart)</label>
       <label class="row"><input id="optGrid" type="checkbox" /> Show grid</label>
+      <div class="set-row"><span>Chart background</span><input id="optBg" type="color" /><button class="btn small" id="optBgReset" type="button">Default</button></div>
+      <div class="set-row" title="Space between the candles and the edges of the chart">
+        <span>Chart padding</span>
+        <label class="inl">Top <input id="optMarTop" type="number" min="0" max="40" step="1" />%</label>
+        <label class="inl">Bottom <input id="optMarBottom" type="number" min="0" max="40" step="1" />%</label>
+        <label class="inl">Right <input id="optMarRight" type="number" min="0" max="200" step="1" /> bars</label>
+        <button class="btn small" id="optMarReset" type="button">Default</button>
+      </div>
     </div>
   </div>
 

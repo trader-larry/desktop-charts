@@ -20,6 +20,8 @@ it never touches accounts, positions or orders. Without credentials it runs on g
    - Or in a terminal inside the folder: `node server.js`
 4. The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
 
+Optional: install the charts as an app (open http://localhost:8787 in a normal Chrome or Edge tab, then browser menu → Install). You get a Start-menu shortcut and dark title bars, and `start-windows.bat` then opens the installed app instead of a separate window.
+
 Each chart also remembers its zoom and scroll for every timeframe, so it reopens showing the same span. The fit button (Alt+R) puts a chart back to the default view.
 
 The server only listens on your own machine (127.0.0.1), so nothing is exposed to your network.
@@ -57,13 +59,15 @@ Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the fron
 | Drawings | Trend line, ray, horizontal line/ray, vertical line, rectangle, circle, fib retracement, text, measure. Click a drawing to select, drag to move, Delete to remove. Magnet snaps to OHLC |
 | Saved layouts | Layout name button at the top right: Save layout (Ctrl+S), Save as new layout, Rename, and a list of saved layouts to switch between (hover one for the delete ×). A dot after the name means unsaved changes. Layouts are stored in this browser |
 | Price alerts | Right-click a chart → Add alert, press Alt+A (price at the cursor), click Add alert on a horizontal line's toolbar, or use the bell button → + Create. Conditions: crossing, crossing up, crossing down; once or every time. Alerts show as orange lines you can drag. When one fires: chime, pop-up, Windows/Mac notification and an entry in the bell's Log. Alerts are checked while the app is open |
+| Extra windows | Layout button (grid icon) → Windows → + New window opens another window with its own charts, layout and choice of watchlist (pick it from the watchlist name). Watchlists, drawings, alerts and saved layouts are shared between windows. Extra windows reopen with the main window at the same size and position (allow pop-ups for localhost once). Rename or delete them from the same menu |
 | Multiple watchlists | Click the watchlist's name: create a new list, make a copy, rename, switch between lists, or delete one (× on hover) |
 | Watchlist options | ⋮ button on the watchlist: choose columns: Last, Change, Change %, Volume and Ext (pre-market / after-hours change % for stocks; hover for the price) |
 | Undo / redo | Ctrl+Z / Ctrl+Y (drawings) |
 | Reset view | Alt+R or the corners icon |
 | Save image | Camera icon |
 | RTH / ETH | Status bar button (stocks): regular hours only, or include extended hours . Pre-market and after-hours bars are shaded on intraday stock charts (turn off in Settings) |
-| Watermark / description | Settings → Display: large faint symbol + timeframe + description behind each chart (on by default) |
+| Background and padding | Settings → Display: chart background colour, and chart padding (top and bottom space in %, right space in bars). Default buttons put them back |
+| Watermark / description | Settings → Display: large faint ticker with the company name below it, behind each chart (on by default) |
 | Time zone | Status bar button or Settings |
 
 Drawings, anchored VWAPs and fixed-range profiles are saved per symbol; the chart layout, each chart's
