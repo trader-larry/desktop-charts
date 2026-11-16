@@ -19,6 +19,8 @@ const LAYOUTS = [
   { id: '4v', name: '4 charts, columns', r: grid(4, 1) },
   { id: '6', name: '6 charts, 3 × 2', r: grid(3, 2) },
   { id: '8', name: '8 charts, 4 × 2', r: grid(4, 2) },
+  { id: '12', name: '12 charts, 6 × 2', r: grid(6, 2) },
+  { id: '24', name: '24 charts, 12 × 2', r: grid(12, 2) },
 ];
 const layoutById = (id) => LAYOUTS.find((l) => l.id === id) || LAYOUTS[0];
 const layoutIcon = (l) => `<svg viewBox="0 0 24 24" class="lay-ic">${l.r.map(([x, y, w, h]) => `<rect x="${3 + x * 18 + 0.8}" y="${4 + y * 16 + 0.8}" width="${w * 18 - 1.6}" height="${h * 16 - 1.6}" rx="1"/>`).join('')}</svg>`;
@@ -1298,8 +1300,18 @@ $('#shotBtn').addEventListener('click', () => {
   const c = chartImage(active);
   c.toBlob((b) => { const a = el('a', { href: URL.createObjectURL(b), download: `${active.info.symbol.replace(/\W/g, '')}_${active.tf.id}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.png` }); a.click(); });
 });
-$('#watchToggle').addEventListener('click', () => { S.showWatch = !S.showWatch; save(); $('#app').classList.toggle('no-watch', !S.showWatch); });
-$('#app').classList.toggle('no-watch', !S.showWatch);
+// The watchlist panel can be collapsed (remembered per window): » in its header, the list button in the top bar,
+// or the tab at the right edge of the charts to bring it back.
+function setWatch(show) {
+  S.showWatch = show; save();
+  $('#app').classList.toggle('no-watch', !show);
+  $('#watchToggle').classList.toggle('on', show);
+  $('#watchToggle').title = show ? 'Hide the watchlist' : 'Show the watchlist';
+}
+$('#watchToggle').addEventListener('click', () => setWatch(!S.showWatch));
+$('#wlCollapse').addEventListener('click', () => setWatch(false));
+$('#wlExpand').addEventListener('click', () => setWatch(true));
+setWatch(S.showWatch !== false);
 
 // ===================== symbol search =====================
 let symMode = 'load';

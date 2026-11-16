@@ -255,3 +255,9 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 #layoutMenu .dd-item { color: var(--text); }
 #winBar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 45; display: flex; align-items: center; gap: 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px 8px 14px; box-shadow: 0 8px 24px #000a; max-width: 92%; }
 #winBar .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; }
+
+/* collapsible watchlist */
+#wlExpand { display: none; position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 35; width: 16px; height: 56px; padding: 0; border: 1px solid var(--border); border-right: 0; border-radius: 6px 0 0 6px; background: var(--panel2); color: var(--muted); cursor: pointer; align-items: center; justify-content: center; }
+#wlExpand:hover { color: #fff; background: var(--hover); }
+#app.no-watch #wlExpand { display: flex; }
+#watchToggle.on { color: #fff; }
