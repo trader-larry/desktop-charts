@@ -345,7 +345,11 @@ class ChartPane {
       this.mainSeries.applyOptions({ priceFormat: this.priceFormat() });
       this.mainSeries.setData(this.shown.map((b) => this.asSeries(b)));
       for (const h of this.handles.values()) try { h.update(this.bars, 'reset'); } catch (e) { console.error(e); }
-      if (first) { this.resetView(true); this.needFit = false; }
+      if (first) {
+        this.resetView(true); this.needFit = false;
+        // with date-range sync on, a chart that finishes loading lines up with the active chart
+        if (S.sync.time && active && active !== this && active.bars.length) syncTimeRange(active);
+      }
       this.drawings.redraw();
     } else {
       const bars = this.bars; const changed = [];
@@ -431,7 +435,9 @@ class ChartPane {
     const n = this.bars.length; if (!n) return;
     const v = useSaved && S.views[this.viewKey()];
     if (v && v.back > 1 && isFinite(v.ahead)) {
-      this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - v.back, to: n - 1 + v.ahead });
+      // at the latest bar: use the right padding from Settings; scrolled back in history: restore exactly
+      const ahead = v.ahead > 0 ? S.margins.right : v.ahead;
+      this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - v.back, to: n - 1 + ahead });
       this.chart.priceScale('right').applyOptions({ autoScale: true });
       return;
     }
@@ -691,10 +697,20 @@ function syncCrosshair(src, p) {
 }
 function syncTimeRange(src) {
   if (syncing || !S.sync.time || src !== active || panes.length < 2) return;
-  const r = src.chart.timeScale().getVisibleRange(); if (!r) return;
+  // Line the charts up by the time at their left edge. When the active chart is at the latest bar, every chart
+  // also ends at its latest bar with the right padding from Settings (a plain time range would drop that space).
+  const r = src.chart.timeScale().getVisibleLogicalRange(); const n = src.bars.length; if (!r || !n) return;
+  const live = r.to > n - 1 + 0.5;
+  const tFrom = src.coords.logicalToTime(r.from), tTo = src.coords.logicalToTime(r.to);
   syncing = true;
-  try { for (const o of panes) if (o !== src && o.bars.length) { try { o.chart.timeScale().setVisibleRange(r); } catch {} } }
-  finally { syncing = false; }
+  try {
+    for (const o of panes) {
+      if (o === src || !o.bars.length) continue;
+      const m = o.bars.length, from = o.coords.timeToLogical(tFrom);
+      const to = live ? m - 1 + S.margins.right : o.coords.timeToLogical(tTo);
+      if (isFinite(from) && isFinite(to) && to > from + 1) { try { o.chart.timeScale().setVisibleLogicalRange({ from, to }); } catch {} }
+    }
+  } finally { syncing = false; }
 }
 
 // ===================== indicators dialog =====================
