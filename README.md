@@ -63,7 +63,7 @@ Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the fron
 | Reset view | Alt+R or the corners icon |
 | Save image | Camera icon |
 | RTH / ETH | Status bar button (stocks): regular hours only, or include extended hours . Pre-market and after-hours bars are shaded on intraday stock charts (turn off in Settings) |
-| Watermark / description | Settings → Display: large faint symbol + timeframe + description behind each chart (on by default) |
+| Watermark / description | Settings → Display: large faint ticker with the company name below it, behind each chart (on by default) |
 | Time zone | Status bar button or Settings |
 
 Drawings, anchored VWAPs and fixed-range profiles are saved per symbol; the chart layout, each chart's

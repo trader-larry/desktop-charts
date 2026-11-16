@@ -485,8 +485,7 @@ class ChartPane {
     if (S.watermark) {
       const h = this.host.clientHeight || 400, w = this.host.clientWidth || 600;
       const big = Math.round(Math.max(28, Math.min(96, Math.min(h / 5, w / 7))));
-      const tfName = { D: '1D', W: '1W' }[this.tf.id] || this.tf.id;
-      lines.push({ text: `${this.info.symbol}, ${tfName}`, color: 'rgba(178, 181, 190, 0.12)', fontSize: big, fontStyle: '600' });
+      lines.push({ text: this.info.symbol, color: 'rgba(178, 181, 190, 0.12)', fontSize: big, fontStyle: '600' });
       const ds = this.description(); if (ds) lines.push({ text: ds.length > 40 ? ds.slice(0, 38).trim() + '…' : ds, color: 'rgba(178, 181, 190, 0.12)', fontSize: Math.round(big * 0.32) });
     }
     try {
@@ -777,6 +776,23 @@ tbBtn('trash', 'trash', 'Remove all drawings on this chart', () => { const d = a
 function setTool(t) { currentTool = t; active?.drawings.setTool(t); paintTools(t); }
 function paintTools(t) {
   $$('#toolbar [data-tool]').forEach((b) => { if (!['magnet', 'lock', 'hide', 'trash'].includes(b.dataset.tool)) b.classList.toggle('on', (b.dataset.tool === 'cursor' && !t) || b.dataset.tool === t); });
+}
+
+// The drawing toolbar scrolls without a scrollbar; small arrows appear when tools are hidden above or below.
+{
+  const mk = (dir) => el('button', { class: `tb-scroll tbs-${dir}`, title: dir === 'up' ? 'More tools above' : 'More tools below',
+    onclick: () => toolbar.scrollBy({ top: (dir === 'up' ? -1 : 1) * Math.max(80, toolbar.clientHeight * 0.6), behavior: 'smooth' }) }, `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${dir === 'up' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}"/></svg>`);
+  const up = mk('up'), down = mk('down');
+  toolbar.prepend(up); toolbar.append(down);
+  const paint = () => {
+    const over = toolbar.scrollHeight - toolbar.clientHeight > (toolbar.classList.contains('over') ? 1 - 36 : 1);
+    toolbar.classList.toggle('over', over);
+    up.classList.toggle('show', over && toolbar.scrollTop > 1);
+    down.classList.toggle('show', over && toolbar.scrollTop + toolbar.clientHeight < toolbar.scrollHeight - 1);
+  };
+  toolbar.addEventListener('scroll', paint, { passive: true });
+  new ResizeObserver(paint).observe(toolbar);
+  setTimeout(paint, 0);
 }
 
 // ===================== saved layouts =====================
