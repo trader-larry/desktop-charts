@@ -1,14 +1,22 @@
 # Desktop Charts
 
 A TradingView-style charting app that runs on your own computer. Dark theme, timeframe bar,
-drawing toolbar, watchlist, indicator search, volume profile / TPO with POC, VAH and VAL,
+up to 24 charts per window, drawing toolbar, watchlists with extended-hours change, price alerts,
+saved layouts, indicator search, volume profile / TPO with POC, VAH and VAL,
 and anchored VWAP. Charts are drawn with TradingView's open-source
 [Lightweight Charts](https://github.com/tradingview/lightweight-charts) library (Apache 2.0).
 
 Market data comes from tastytrade (DXLink streaming). The app is **read-only charting**:
 it never touches accounts, positions or orders. Without credentials it runs on generated demo data.
 
-![Four 5-minute charts (SPY, QQQ, IWM, AAPL) with volume profiles and the watchlist (demo data)](docs/screenshot.png)
+![Four 5-minute charts (SPY, QQQ, IWM, AAPL) with volume profiles, ticker watermarks, shaded extended hours and the watchlist with its Ext column (demo data)](docs/screenshot.png)
+
+<details>
+<summary>12-chart layout</summary>
+
+![Twelve 5-minute charts in a 6 × 2 layout with the watchlist collapsed (demo data)](docs/layout-12.png)
+
+</details>
 
 ## Run it
 
@@ -50,16 +58,18 @@ Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the fron
 |---|---|
 | Change symbol | Click the symbol at top left, or just start typing on the chart |
 | Timeframes | 1m 2m 5m 15m 30m 1h D W in the top bar |
-| Multi-chart layouts | Layout button (grid icon, top right): 1, 2, 3, 4, 6 or 8 charts. Each chart has its own symbol, timeframe, chart type and indicators. Click a chart to make it active (blue outline); the top bar, drawing tools and watchlist act on the active chart. Click a chart's title to change its symbol. Tab / Shift+Tab cycles charts, Alt+Enter (or the arrows icon in a chart's legend) maximizes one chart and restores the layout |
+| Multi-chart layouts | Layout button (grid icon, top right): 1, 2, 3, 4, 6, 8, 12 (6 × 2) or 24 (12 × 2) charts. Each chart has its own symbol, timeframe, chart type and indicators. Click a chart to make it active (blue outline); the top bar, drawing tools and watchlist act on the active chart. Click a chart's title to change its symbol. Tab / Shift+Tab cycles charts, Alt+Enter (or the arrows icon in a chart's legend) maximizes one chart and restores the layout |
 | Sync in layout | In the layout menu: Symbol, Interval, Crosshair (on by default) and Date range. Drawings stay on the chart they were drawn on; horizontal lines and rays show on every chart of that symbol. Select a drawing and use the "This chart / All charts" button to switch |
 | Indicators | **Indicators** button or `/`. Star the ones you use for the Favorites list. Hover a legend row to hide, edit or remove it |
 | Volume profile | *Volume Profile, Visible Range* (on by default), *Session Volume Profile*, *Fixed Range* (range tool in the left toolbar) |
 | TPO | *TPO (Market Profile)*: letters per 30-minute period (blocks when zoomed out), POC, value area, initial balance |
 | Anchored VWAP | Anchor tool in the left toolbar, then click a bar. Bands and anchor time are in its settings |
+| Drawing toolbar | Left side of the window. When the window is too short to show every tool, small up and down arrows appear at the ends; click them to scroll the tools |
 | Drawings | Trend line, ray, horizontal line/ray, vertical line, rectangle, circle, fib retracement, text, measure. Click a drawing to select, drag to move, Delete to remove. Magnet snaps to OHLC |
 | Saved layouts | Layout name button at the top right: Save layout (Ctrl+S), Save as new layout, Rename, and a list of saved layouts to switch between (hover one for the delete ×). A dot after the name means unsaved changes. Layouts are stored in this browser |
 | Price alerts | Right-click a chart → Add alert, press Alt+A (price at the cursor), click Add alert on a horizontal line's toolbar, or use the bell button → + Create. Conditions: crossing, crossing up, crossing down; once or every time. Alerts show as orange lines you can drag. When one fires: chime, pop-up, Windows/Mac notification and an entry in the bell's Log. Alerts are checked while the app is open |
 | Extra windows | Layout button (grid icon) → Windows → + New window opens another window with its own charts, layout and choice of watchlist (pick it from the watchlist name). Watchlists, drawings, alerts and saved layouts are shared between windows. Extra windows reopen with the main window at the same size and position (allow pop-ups for localhost once). Rename or delete them from the same menu |
+| Hide the watchlist | » in the watchlist header or the list button at the top right hides it to give the charts more room; the list button or the tab at the right edge brings it back. Remembered per window |
 | Multiple watchlists | Click the watchlist's name: create a new list, make a copy, rename, switch between lists, or delete one (× on hover) |
 | Watchlist options | ⋮ button on the watchlist: choose columns: Last, Change, Change %, Volume and Ext (pre-market / after-hours change % for stocks; hover for the price) |
 | Undo / redo | Ctrl+Z / Ctrl+Y (drawings) |
