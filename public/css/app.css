@@ -84,6 +84,10 @@ code { background: var(--panel2); padding: 1px 4px; border-radius: 3px; }
 .wl-cols, .wl-row { display: grid; grid-template-columns: var(--wl-cols, 1.3fr 1fr .8fr .8fr); gap: 4px; padding: 3px 10px; font-size: 12px; }
 .wl-cols { color: var(--dim); border-bottom: 1px solid var(--border); }
 .wl-cols span:not(:first-child), .wl-row span:not(:first-child) { text-align: right; }
+.wl-cols .wl-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.wl-cols .wl-sort:hover { color: var(--text); }
+.wl-cols .wl-sort.on { color: var(--text); }
+.wl-cols .wl-sort i { font-style: normal; font-size: 9px; margin: 0 3px; color: var(--muted); }
 #wlRows { overflow-y: auto; flex: 1; }
 .wl-row { padding: 6px 10px; cursor: pointer; position: relative; font-variant-numeric: tabular-nums; }
 .wl-row:hover { background: var(--hover); }
