@@ -126,6 +126,58 @@ export const INDICATORS = {
     },
   },
 
+  spxlevels: {
+    name: 'SPX Levels (XSP)', short: 'SPX Levels', cat: 'Technicals',
+    desc: "Today's pre-market SPX levels. Enter them as posted SPX prices; on an XSP chart they are divided by 10. 0 hides a level",
+    params: [
+      { key: 'chartType', label: 'Chart (Auto: XSP divides by 10, anything else as posted)', type: 'select', options: ['Auto', 'XSP', 'SPX'], def: 'Auto' },
+      { key: 'callTrigger', label: 'Call trigger', type: 'float', def: 0 },
+      { key: 'callStop', label: 'Call stop', type: 'float', def: 0 },
+      { key: 'UT1', label: 'UT1', type: 'float', def: 0 },
+      { key: 'UT2', label: 'UT2', type: 'float', def: 0 },
+      { key: 'UT3', label: 'UT3', type: 'float', def: 0 },
+      { key: 'putTrigger', label: 'Put trigger', type: 'float', def: 0 },
+      { key: 'putStop', label: 'Put stop', type: 'float', def: 0 },
+      { key: 'DT1', label: 'DT1', type: 'float', def: 0 },
+      { key: 'DT2', label: 'DT2', type: 'float', def: 0 },
+      { key: 'DT3', label: 'DT3', type: 'float', def: 0 },
+      { key: 'upColor', label: 'UT color', type: 'color', def: '#26a69a' },
+      { key: 'trigColor', label: 'Trigger color', type: 'color', def: '#ff9800' },
+      { key: 'stopColor', label: 'Stop color', type: 'color', def: '#8a8d96' },
+      { key: 'dnColor', label: 'DT color', type: 'color', def: '#ef5350' },
+    ],
+    create(ctx, p) {
+      const h = makeHandle(ctx);
+      const xsp = p.chartType === 'XSP' || (p.chartType !== 'SPX' && /XSP/i.test(ctx.info?.symbol || ''));
+      const div = xsp ? 10 : 1;
+      const label = xsp ? 'SPX levels / 10 (XSP)' : 'SPX levels as posted';
+      const L = [
+        ['UT3', 'UT3', p.upColor], ['UT2', 'UT2', p.upColor], ['UT1', 'UT1', p.upColor],
+        ['callTrigger', 'CT', p.trigColor, 2], ['callStop', 'CS', p.stopColor, 1, LineStyle.Dashed],
+        ['putStop', 'PS', p.stopColor, 1, LineStyle.Dashed], ['putTrigger', 'PT', p.trigColor, 2],
+        ['DT1', 'DT1', p.dnColor], ['DT2', 'DT2', p.dnColor], ['DT3', 'DT3', p.dnColor],
+      ].filter(([k]) => +p[k] > 0).map(([k, title, color, width = 1, lineStyle = LineStyle.Solid]) => ({
+        price: Math.round((+p[k] / div) * 100) / 100,
+        s: h.add(LineSeries, lineOpts(color, width, { title, lineStyle })),
+      }));
+      let n = -1;
+      return {
+        update(bs, kind) {
+          // live ticks only matter when a new bar starts (the levels are flat)
+          if (kind === 'update' && bs.length === n) return;
+          n = bs.length;
+          if (!bs.length) return;
+          // "today" = the last session on the chart (on daily and longer charts, the last bar)
+          const from = ctx.tf.sec >= 86400 ? bs.length - 1 : sessions(bs, ctx.sessionKey).pop().from;
+          const today = bs.slice(from);
+          for (const l of L) l.s.setData(today.map((b) => ({ time: b.time, value: l.price })));
+        },
+        legend() { return [{ v: label, c: '#8a8d96' }]; },
+        destroy: h.destroy,
+      };
+    },
+  },
+
   rsi: {
     name: 'Relative Strength Index', short: 'RSI', cat: 'Technicals', pane: true, desc: 'Momentum oscillator 0-100',
     params: [{ key: 'length', label: 'Length', type: 'int', def: 14, min: 2 }, SRC, { key: 'color', label: 'Color', type: 'color', def: '#7e57c2' }],

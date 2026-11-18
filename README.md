@@ -63,6 +63,7 @@ Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the fron
 | Indicators | **Indicators** button or `/`. Star the ones you use for the Favorites list. Hover a legend row to hide, edit or remove it |
 | Volume profile | *Volume Profile, Visible Range* (on by default), *Session Volume Profile*, *Fixed Range* (range tool in the left toolbar) |
 | TPO | *TPO (Market Profile)*: letters per 30-minute period (blocks when zoomed out), POC, value area, initial balance |
+| SPX levels | *SPX Levels (XSP)* in Indicators: type the day's posted SPX levels (call/put trigger and stop, UT1–3, DT1–3) into its settings; 0 hides a level. On an XSP chart they are divided by 10 automatically, on SPX they draw as posted (or pick XSP / SPX yourself). Lines cover the latest session only. Use Defaults → Apply to all charts to update every chart at once |
 | Anchored VWAP | Anchor tool in the left toolbar, then click a bar. Bands and anchor time are in its settings |
 | Drawing toolbar | Left side of the window. When the window is too short to show every tool, small up and down arrows appear at the ends; click them to scroll the tools |
 | Drawings | Trend line, ray, horizontal line/ray, vertical line, rectangle, circle, fib retracement, text, measure. Click a drawing to select, drag to move, Delete to remove. Magnet snaps to OHLC |
