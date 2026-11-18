@@ -1147,7 +1147,9 @@ if (WIN !== 'main') winChan?.addEventListener('message', (e) => {
 function whoIsOpen(ms = 400) { return new Promise((res) => { winChan?.postMessage({ type: 'who' }); setTimeout(() => res(new Set(openWins)), winChan ? ms : 0); }); }
 function openWindow(id) {
   const w = S.windows[id]; if (!w) return null;
-  const f = w.w ? `popup,left=${w.x},top=${w.y},width=${w.w},height=${w.h}` : `popup,width=${Math.min(1200, screen.availWidth)},height=${Math.min(800, screen.availHeight)}`;
+  // window.open's width/height set the inner (page) size, so open at the saved inner size;
+  // older saves only have the outer size, which the new window corrects itself (see below)
+  const f = w.w ? `popup,left=${w.x},top=${w.y},width=${w.iw || w.w},height=${w.ih || w.h}` : `popup,width=${Math.min(1200, screen.availWidth)},height=${Math.min(800, screen.availHeight)}`;
   return window.open(`/?win=${encodeURIComponent(id)}`, `charts-${id}`, f);
 }
 function newWindow() {
@@ -1197,9 +1199,13 @@ function renderWindowsSection(m) {
 // remember this window's size and position (the main app window's is remembered by the browser)
 if (WIN !== 'main') {
   let last = '';
+  // Snap to the saved outer size once on open, in case the title bar and borders made it larger
+  // (they are not part of window.open's width/height). Without this the window grows a little every reopen.
+  const saved = S.windows[WIN];
+  if (saved?.w && (outerWidth !== saved.w || outerHeight !== saved.h)) { try { resizeTo(saved.w, saved.h); } catch {} }
   const track = () => {
     const w = S.windows[WIN]; if (!w) return;
-    const b = { x: screenX, y: screenY, w: outerWidth, h: outerHeight }; const k = JSON.stringify(b);
+    const b = { x: screenX, y: screenY, w: outerWidth, h: outerHeight, iw: innerWidth, ih: innerHeight }; const k = JSON.stringify(b);
     if (k !== last) { last = k; Object.assign(w, b); save(); }
   };
   addEventListener('resize', track); setInterval(track, 2000);
