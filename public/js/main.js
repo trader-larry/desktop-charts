@@ -1203,6 +1203,9 @@ if (WIN !== 'main') {
   // (they are not part of window.open's width/height). Without this the window grows a little every reopen.
   const saved = S.windows[WIN];
   if (saved?.w && (outerWidth !== saved.w || outerHeight !== saved.h)) { try { resizeTo(saved.w, saved.h); } catch {} }
+  // Same for the position: window.open's left/top don't always land where screenX/screenY said
+  // (on Windows the window ends up a few pixels higher), so move it to the saved spot once.
+  if (saved?.w && (screenX !== saved.x || screenY !== saved.y)) { try { moveTo(saved.x, saved.y); } catch {} }
   const track = () => {
     const w = S.windows[WIN]; if (!w) return;
     const b = { x: screenX, y: screenY, w: outerWidth, h: outerHeight, iw: innerWidth, ih: innerHeight }; const k = JSON.stringify(b);
