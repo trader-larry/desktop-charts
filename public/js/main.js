@@ -1202,6 +1202,17 @@ if (WIN !== 'main') {
   // Snap to the saved outer size once on open, in case the title bar and borders made it larger
   // (they are not part of window.open's width/height). Without this the window grows a little every reopen.
   const saved = S.windows[WIN];
+  // On Windows a window has invisible borders (about 7px) at its left, right and bottom. A window pushed
+  // against a screen edge (or the bottom of the screen with an auto-hiding taskbar) has that border past the
+  // usable area, and Chrome won't place a window there: it shifts it back in, so it reopens a few pixels
+  // higher or further right. Trim those few pixels off the window instead, so its visible edges stay put.
+  if (saved?.w) {
+    const L = screen.availLeft ?? 0, T = screen.availTop ?? 0, R = L + screen.availWidth, B = T + screen.availHeight;
+    const small = (n) => n > 0 && n <= 16;
+    const left = L - saved.x; if (small(left)) { saved.x += left; saved.w -= left; }
+    const right = saved.x + saved.w - R; if (small(right)) saved.w -= right;
+    const bottom = saved.y + saved.h - B; if (small(bottom)) saved.h -= bottom;
+  }
   if (saved?.w && (outerWidth !== saved.w || outerHeight !== saved.h)) { try { resizeTo(saved.w, saved.h); } catch {} }
   // Same for the position: window.open's left/top don't always land where screenX/screenY said
   // (on Windows the window ends up a few pixels higher), so move it to the saved spot once.
