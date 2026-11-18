@@ -65,6 +65,7 @@ S.sync = { ...DEFAULT_STATE.sync, ...(S.sync || {}) };
 S.panes.forEach((c) => { c.id ||= uid(); }); // stable id per chart, used to keep drawings on their own chart
 S.indicatorDefaults ||= {};
 S.chartBg ||= DEFAULT_BG; // chart background colour
+if (S.themeBg === undefined) S.themeBg = true; // also tint the app (toolbars, watchlist, status bar) to match the chart background
 S.margins = { top: 8, bottom: 8, right: 12, ...(S.margins || {}) }; // chart padding: top / bottom in % of the chart height, right in bars
 S.alerts ||= []; S.alertLog ||= []; if (S.alertSound === undefined) S.alertSound = true; // price alerts
 S.views ||= {}; // remembered zoom/scroll per chart and timeframe: { 'paneId|tf': { back, ahead } } in bars from the last bar
@@ -1517,7 +1518,7 @@ async function openSettings() {
   $('#cfgMsg').textContent = '';
   const st = await fetch('/api/status').then((r) => r.json()).catch(() => ({}));
   $('#connInfo').textContent = st.forcedDemo ? 'Started with --demo: using demo data.' : st.mode === 'live' ? `Connected (data level: ${st.level || 'api'}).` : st.configured ? `Credentials saved but connection failed: ${st.error || 'unknown error'}` : 'Not connected. Using demo data.';
-  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optBg').value = S.chartBg; fillMargins(); $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
+  $('#tzSelect').value = S.tz; $('#optRth').checked = S.rth; $('#optGrid').checked = S.grid; $('#optBg').value = S.chartBg; $('#optThemeBg').checked = S.themeBg; fillMargins(); $('#optShade').checked = S.shadeEth; $('#optWatermark').checked = S.watermark;
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#tzSelect').innerHTML = TZ_CHOICES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
@@ -1526,8 +1527,23 @@ $('#optRth').addEventListener('change', (e) => setRth(e.target.checked));
 $('#optShade').addEventListener('change', (e) => { S.shadeEth = e.target.checked; save(); for (const p of panes) p.ethShade?.requestUpdate?.(); });
 $('#optWatermark').addEventListener('change', (e) => { S.watermark = e.target.checked; save(); for (const p of panes) p.updateWatermark(); });
 // ---- chart background and padding (Settings → Display) ----
+// Theme colours as offsets from the background, matching the default dark theme (#0f0f0f → panel #131313, etc).
+const THEME_STEPS = { '--bg': 0, '--panel': 4, '--panel2': 11, '--hover': 21, '--active': 27, '--border': 23 };
+function shiftHex(hex, d) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.min(255, Math.max(0, v + d)).toString(16).padStart(2, '0');
+  return '#' + c(n >> 16) + c((n >> 8) & 255) + c(n & 255);
+}
+function applyThemeBg() {
+  const root = document.documentElement.style;
+  const n = parseInt(S.chartBg.slice(1), 16), lum = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  // The app's text and icons are light, so a light background would make them unreadable: keep the default dark theme then.
+  if (!S.themeBg || S.chartBg.toLowerCase() === DEFAULT_BG || lum > 110) { for (const k in THEME_STEPS) root.removeProperty(k); return; }
+  for (const [k, d] of Object.entries(THEME_STEPS)) root.setProperty(k, shiftHex(S.chartBg, d));
+}
 function applyChartStyle(scrollRight = false) {
   document.documentElement.style.setProperty('--chart-bg', S.chartBg);
+  applyThemeBg();
   for (const p of panes) {
     p.chart.applyOptions({ layout: { background: { type: 'solid', color: S.chartBg } }, timeScale: { rightOffset: S.margins.right },
       rightPriceScale: { scaleMargins: { top: S.margins.top / 100, bottom: S.margins.bottom / 100 } } });
@@ -1536,13 +1552,14 @@ function applyChartStyle(scrollRight = false) {
 }
 const clampNum = (v, lo, hi, def) => { const n = Number(v); return isFinite(n) && v !== '' ? Math.min(hi, Math.max(lo, n)) : def; };
 $('#optBg').addEventListener('input', (e) => { S.chartBg = e.target.value; save(); applyChartStyle(); });
+$('#optThemeBg').addEventListener('change', (e) => { S.themeBg = e.target.checked; save(); applyThemeBg(); });
 $('#optBgReset').addEventListener('click', () => { S.chartBg = DEFAULT_BG; $('#optBg').value = DEFAULT_BG; save(); applyChartStyle(); });
 for (const [id, k, hi] of [['#optMarTop', 'top', 40], ['#optMarBottom', 'bottom', 40], ['#optMarRight', 'right', 200]]) {
   $(id).addEventListener('input', (e) => { const v = clampNum(e.target.value, 0, hi, null); if (v == null) return; S.margins[k] = v; save(); applyChartStyle(k === 'right'); });
 }
 $('#optMarReset').addEventListener('click', () => { S.margins = { top: 8, bottom: 8, right: 12 }; fillMargins(); save(); applyChartStyle(true); });
 function fillMargins() { $('#optMarTop').value = S.margins.top; $('#optMarBottom').value = S.margins.bottom; $('#optMarRight').value = S.margins.right; }
-document.documentElement.style.setProperty('--chart-bg', S.chartBg);
+document.documentElement.style.setProperty('--chart-bg', S.chartBg); applyThemeBg();
 $('#optGrid').addEventListener('change', (e) => { S.grid = e.target.checked; save(); for (const p of panes) p.chart.applyOptions({ grid: { vertLines: { visible: S.grid }, horzLines: { visible: S.grid } } }); });
 $('#cfgSave').addEventListener('click', async () => {
   $('#cfgMsg').textContent = 'Connecting…';
