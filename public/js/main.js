@@ -1232,7 +1232,7 @@ window.addEventListener('storage', (e) => {
     if (JSON.stringify(S[k]) !== JSON.stringify(v)) { S[k] = v; changed.add(k); }
   }
   if (!changed.size) return;
-  if (changed.has('watchlists') || changed.has('wlCols')) {
+  if (changed.has('watchlists') || changed.has('wlCols') || changed.has('wlSort')) {
     if (!S.watchlists[S.wlName]) S.wlName = Object.keys(S.watchlists)[0];
     S.watchlist = S.watchlists[S.wlName]; renderWatchlist(); refreshQuoteSubs();
   }
@@ -1391,7 +1391,52 @@ const WL_COLS = [['last', 'Last', 'Last', '1fr'], ['chg', 'Change', 'Chg', '.8fr
 function wlTemplate() { return ['1.3fr', ...WL_COLS.filter((c) => S.wlCols[c[0]]).map((c) => c[3])].join(' '); }
 function renderWlCols() {
   $('#watchlist').style.setProperty('--wl-cols', wlTemplate());
-  $('#wlCols').innerHTML = `<span>Symbol</span>${WL_COLS.filter((c) => S.wlCols[c[0]]).map((c) => `<span>${c[2]}</span>`).join('')}`;
+  const srt = wlSortOn();
+  const head = (k, label, name) => {
+    const on = srt && srt.key === k, arrow = on ? (srt.dir > 0 ? '▲' : '▼') : '';
+    const next = !on ? (k === 'sym' ? 'A to Z' : 'high to low') : (srt.dir === (k === 'sym' ? 1 : -1)) ? (k === 'sym' ? 'Z to A' : 'low to high') : 'your own order';
+    return `<span class="wl-sort${on ? ' on' : ''}" data-k="${k}" title="Sort by ${name}: click for ${next}">${on && k !== 'sym' ? `<i>${arrow}</i>` : ''}${label}${on && k === 'sym' ? `<i>${arrow}</i>` : ''}</span>`;
+  };
+  $('#wlCols').innerHTML = head('sym', 'Symbol', 'symbol') + WL_COLS.filter((c) => S.wlCols[c[0]]).map((c) => head(c[0], c[2], c[1].toLowerCase())).join('');
+}
+// ---- sorting by a column heading ----
+// Click a heading to sort by it: numbers start high to low, Symbol starts A to Z; the second click flips it and the
+// third goes back to the list's own order. Only the view is sorted: the saved order of the list doesn't change.
+// While a number column is sorted the rows re-sort as prices move, at most once a second.
+function wlSortOn() { const s = S.wlSort; return s && s.key && (s.key === 'sym' || S.wlCols[s.key]) ? s : null; }
+function wlSortVal(sym, k) {
+  if (k === 'sym') return sym;
+  const q = quotes.get(sym); if (!q) return null;
+  const ch = q.prevClose && isFinite(q.last) ? q.last - q.prevClose : null;
+  const v = k === 'last' ? q.last : k === 'chg' ? ch : k === 'pct' ? (ch == null ? null : ch / q.prevClose * 100) : k === 'vol' ? q.volume : k === 'ext' ? extData(sym, q)?.pc : null;
+  return isFinite(v) ? v : null;
+}
+function wlSorted() {
+  const s = wlSortOn(); if (!s) return S.watchlist;
+  const rows = S.watchlist.map((sym, i) => ({ sym, i, v: wlSortVal(sym, s.key) }));
+  rows.sort((a, b) => {
+    if (a.v == null || b.v == null) return a.v == null && b.v == null ? a.i - b.i : a.v == null ? 1 : -1; // no value yet: at the bottom
+    const d = s.key === 'sym' ? a.v.localeCompare(b.v) : a.v - b.v;
+    return d ? d * s.dir : a.i - b.i;
+  });
+  return rows.map((r) => r.sym);
+}
+function wlSortBy(k) {
+  const s = wlSortOn(), first = k === 'sym' ? 1 : -1;
+  S.wlSort = !s || s.key !== k ? { key: k, dir: first } : s.dir === first ? { key: k, dir: -first } : null;
+  save(); renderWatchlist();
+}
+$('#wlCols').addEventListener('click', (e) => { const h = e.target.closest('.wl-sort'); if (h) wlSortBy(h.dataset.k); });
+let wlResortT = null;
+function wlResortSoon() {
+  const s = wlSortOn(); if (!s || s.key === 'sym' || wlResortT) return;
+  wlResortT = setTimeout(() => {
+    wlResortT = null; const box = $('#wlRows');
+    const order = wlSorted(), now = [...box.children].map((r) => r.dataset.sym);
+    if (order.join('\n') === now.join('\n')) return;
+    const bySym = new Map([...box.children].map((r) => [r.dataset.sym, r]));
+    for (const sym of order) if (bySym.has(sym)) box.append(bySym.get(sym));
+  }, 1000);
 }
 function renderWlMenu() {
   const m = $('#wlMenu'); m.innerHTML = '';
@@ -1478,7 +1523,7 @@ function renderWatchlist() {
   const box = $('#wlRows'); box.innerHTML = '';
   const shown = new Set(panes.map((p) => p.info.symbol));
   const cols = WL_COLS.filter((c) => S.wlCols[c[0]]).map((c) => `<span class="${c[0]}"></span>`).join('');
-  for (const s of S.watchlist) {
+  for (const s of wlSorted()) {
     const r = el('div', { class: 'wl-row' + (s === active?.info.symbol ? ' cur' : shown.has(s) ? ' inlayout' : ''), 'data-sym': s, onclick: (e) => { if (!e.target.closest('.del')) active.loadSymbol(s); } },
       `<span>${s}</span>${cols}<button class="del" title="Remove">×</button>`);
     r.querySelector('.del').addEventListener('click', () => { S.watchlist = S.watchlist.filter((x) => x !== s); save(); renderWatchlist(); refreshQuoteSubs(); });
@@ -1489,6 +1534,7 @@ function renderWatchlist() {
 }
 function paintQuote(sym) {
   const q = quotes.get(sym); const r = $(`.wl-row[data-sym="${CSS.escape(sym)}"]`); if (!q || !r) return;
+  wlResortSoon();
   const ch = q.prevClose ? q.last - q.prevClose : null; const pc = ch != null ? ch / q.prevClose * 100 : null;
   const cls = ch == null ? '' : ch >= 0 ? 'up' : 'down';
   const set = (k, txt, c = '') => { const x = r.querySelector('.' + k); if (x) { x.className = k + (c ? ' ' + c : ''); x.textContent = txt; } };
