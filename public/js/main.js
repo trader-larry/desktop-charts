@@ -1659,7 +1659,14 @@ function renderStatus() {
 $('#rthBtn').addEventListener('click', () => setRth(!S.rth));
 $('#tzBtn').addEventListener('click', () => { const i = TZ_CHOICES.findIndex((t) => t[0] === S.tz); setTz(TZ_CHOICES[(i + 1) % TZ_CHOICES.length][0]); });
 setInterval(() => { const p = parts(Date.now() / 1000, S.tz); $('#clock').textContent = `${p.weekday} ${p.day}/${p.month} ${p.hour}:${p.minute}`; }, 1000);
-function setConn(state, text) { $('#connDot').className = 'dot ' + (state === 'live' ? 'live' : state === 'demo' ? 'demo' : state === 'err' ? 'err' : ''); $('#connText').textContent = text; }
+// The status bar shows a short label; the full detail (feed, errors) stays in the hover tooltip.
+const CONN_LABELS = { live: 'Live', demo: 'Demo', connecting: 'Connecting…', err: 'Error' };
+function setConn(state, text, label) {
+  $('#connDot').className = 'dot ' + (state === 'live' ? 'live' : state === 'demo' ? 'demo' : state === 'err' ? 'err' : '');
+  const el = $('#connText');
+  el.textContent = label || CONN_LABELS[state] || text;
+  el.title = $('#connDot').title = text || '';
+}
 
 // ===================== modals, toasts, keys =====================
 function openModal(sel) { closeModals(); $('#modalBack').classList.remove('hidden'); $(sel).classList.remove('hidden'); }
@@ -1701,7 +1708,7 @@ async function boot() {
   }
   if (!feed) {
     feed = new DemoFeed(); feed.onStatus = setConn; await feed.init();
-    if (status.configured && status.error) setConn('err', `tastytrade login failed, showing demo data: ${status.error}`);
+    if (status.configured && status.error) setConn('err', `tastytrade login failed, showing demo data: ${status.error}`, 'Demo (login failed)');
   }
   feed.onQuote = (q) => { quotes.set(q.symbol, { ...(quotes.get(q.symbol) || {}), ...Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && !Number.isNaN(v))) }); paintQuote(q.symbol); if (q.symbol === active?.info.symbol) renderDetail(); checkAlerts(q.symbol, alertPrice(quotes.get(q.symbol))); };
   applyLayout(S.layout);

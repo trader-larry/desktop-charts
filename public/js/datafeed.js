@@ -4,7 +4,7 @@
 //   feed.subscribeChart(info, tf, opts, onBars) -> unsubscribe()   onBars(bars, 'reset'|'update'|'nodata')
 //   (any number of charts can subscribe at once)
 //   feed.setQuoteSymbols(infos); feed.onQuote = (q) => {}
-//   feed.onStatus = (state, text) => {}
+//   feed.onStatus = (state, text, label?) => {}   // text = full detail (tooltip), label = short status-bar text
 // Bars: { time: unixSeconds, open, high, low, close, volume }
 
 import { parts, symbolKind } from './util.js';
@@ -81,7 +81,7 @@ export class TastyFeed {
     ws.onclose = () => {
       clearInterval(this.ka);
       if (this.ws !== ws) return;
-      this.onStatus('err', 'Disconnected, reconnecting…');
+      this.onStatus('err', 'Disconnected, reconnecting…', 'Reconnecting…');
       const wait = Math.min(30000, 1000 * 2 ** this.retry++);
       setTimeout(() => this.connect(this.retry > 2).catch((e) => this.fail(e)), wait);
     };

@@ -47,7 +47,7 @@ The two values are written to `config.json` in this folder (you can also copy `c
 to `config.json` and fill it in by hand). The file is listed in `.gitignore`, so it stays out of git;
 never commit it or paste its contents anywhere public. The browser never receives
 the secret; the local server swaps it for short-lived tokens itself. The status bar at the bottom
-turns green and says "tastytrade · DXLink" when data is live.
+turns green and says "Live" when data is streaming (hover it for details).
 
 Symbols: stocks/ETFs as usual (`AAPL`, `SPY`), futures with a slash for the front month (`/ES`, `/NQ`,
 `/CL`, `/GC`) or a specific contract (`/ESZ6`), crypto as `BTC/USD`.
