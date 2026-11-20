@@ -20,6 +20,9 @@ export const SPECIAL_TOOLS = [
 export const DRAW_COLORS = ['#2962ff', '#e0e3eb', '#26a69a', '#ef5350', '#f0b90b', '#ab47bc', '#ff9800', '#00bcd4'];
 // Drawings whose outline can be solid / dashed / dotted.
 export const STYLED_TYPES = ['trend', 'ray', 'hline', 'hray', 'vline', 'rect', 'circle'];
+// Drawings that can show their price on the price axis. Horizontal lines/rays show it by default.
+export const LABEL_TYPES = ['trend', 'ray', 'hline', 'hray', 'rect'];
+export const hasPriceLabel = (d) => LABEL_TYPES.includes(d.type) && (d.priceLabel ?? (d.type === 'hline' || d.type === 'hray'));
 export const LINE_STYLES = ['solid', 'dashed', 'dotted'];
 export const LINE_WIDTHS = [1, 2, 3, 4];
 export function dashFor(style, w = 1) {
@@ -212,7 +215,9 @@ class DrawPrimitive {
     const views = [];
     const all = o.creating ? [...o.list, o.creating.d] : o.list;
     for (const d of all) {
-      if (d.type === 'hline' || d.type === 'hray' || (d.id === o.sel && d.type !== 'vline')) {
+      const horiz = d.type === 'hline' || d.type === 'hray';
+      // selected drawings show their anchor prices while editing; horizontal lines follow their setting only
+      if (hasPriceLabel(d) || (d.id === o.sel && d.type !== 'vline' && !horiz)) {
         for (const p of d.type === 'hline' || d.type === 'hray' ? [d.pts[0]] : d.pts) {
           const y = o.series.priceToCoordinate(p.p); if (y == null) continue;
           views.push({ coordinate: () => y, text: () => fmtPrice(p.p), textColor: () => '#fff', backColor: () => d.color, visible: () => true, tickVisible: () => true });

@@ -3,7 +3,7 @@ import { symbolKind } from './util.js';
 import { TIMEFRAMES, tfById, ICONS, hydrateIcons, $, $$, el, uid, fmtPrice, decimalsFor, fmtVol, TZ_CHOICES, fmtTick, fmtCrosshair, sessionKeyFn, parts } from './util.js';
 import { TastyFeed, DemoFeed } from './datafeed.js';
 import { INDICATORS, CATEGORIES, defaults } from './indicators.js';
-import { Drawings, DRAW_TOOLS, SPECIAL_TOOLS, DRAW_COLORS, STYLED_TYPES, LINE_STYLES, LINE_WIDTHS, dashFor } from './drawings.js';
+import { Drawings, DRAW_TOOLS, SPECIAL_TOOLS, DRAW_COLORS, STYLED_TYPES, LABEL_TYPES, hasPriceLabel, LINE_STYLES, LINE_WIDTHS, dashFor } from './drawings.js';
 
 // ===================== layouts =====================
 // Each layout is a list of chart rectangles [x, y, w, h] in fractions of the chart area.
@@ -612,6 +612,11 @@ class ChartPane {
       bar.append(el('button', { class: 'tb-btn small', title: `Line style: ${st}. Click for ${next}`,
         onclick: () => { dr.updateSelected({ style: next }); this.renderDrawBar(dr.selected()); } }, lineStyleSvg(st, Math.min(w, 2))));
     }
+    if (LABEL_TYPES.includes(d.type)) {
+      const on = hasPriceLabel(d);
+      bar.append(el('button', { class: 'tb-btn small' + (on ? ' on' : ''), title: on ? 'Price label on the price axis is shown. Click to hide it' : 'Price label is hidden. Click to show it on the price axis',
+        onclick: () => { dr.updateSelected({ priceLabel: !on }); this.renderDrawBar(dr.selected()); } }, 'Price label'));
+    }
     bar.append(el('button', { class: 'tb-btn small', title: 'Line thickness (click to change)', onclick: () => { dr.updateSelected({ width: LINE_WIDTHS[(LINE_WIDTHS.indexOf(w) + 1) % LINE_WIDTHS.length] }); this.renderDrawBar(dr.selected()); } }, `${w}px`));
     bar.append(el('button', { class: 'tb-btn icon-btn small', title: 'Settings: style, thickness and exact coordinates (or double-click the drawing)', onclick: () => openDrawingDialog(this, dr.selected()) }, `<span class="ic">${ICONS.gear}</span>`));
     if (d.type === 'text') bar.append(el('button', { class: 'tb-btn small', onclick: () => { const t = prompt('Text', d.text); if (t != null) dr.updateSelected({ text: t }); } }, 'Edit'));
@@ -654,6 +659,8 @@ function openDrawingDialog(pane, d) {
   $('#dwStyle').value = d.style || 'solid';
   $('#dwWidth').innerHTML = LINE_WIDTHS.map((x) => `<option value="${x}">${x}px</option>`).join('');
   $('#dwWidth').value = String(d.width || 1);
+  $('#dwLabelRow').classList.toggle('hidden', !LABEL_TYPES.includes(d.type));
+  $('#dwLabel').checked = hasPriceLabel(d);
   $('#dwColor').value = /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#2962ff';
   const box = $('#dwPts'); box.innerHTML = '';
   const showP = d.type !== 'vline', showT = d.type !== 'hline';
@@ -690,6 +697,7 @@ function submitDrawingDialog() {
   const patch = { pts, width: Number($('#dwWidth').value) || 1 };
   const col = $('#dwColor').value; if (col.toLowerCase() !== String(d.color).toLowerCase()) patch.color = col;
   if (STYLED_TYPES.includes(d.type)) patch.style = $('#dwStyle').value;
+  if (LABEL_TYPES.includes(d.type)) patch.priceLabel = $('#dwLabel').checked;
   if (dr.sel !== d.id) dr.select(d.id);
   dr.updateSelected(patch);
   pane.renderDrawBar(dr.selected());
