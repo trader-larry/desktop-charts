@@ -236,6 +236,12 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 .al-acts .del:hover { color: var(--down); }
 .al-note { grid-column: 2 / -1; color: var(--dim); font-size: 11px; }
 .al-empty { color: var(--dim); padding: 10px 6px; }
+.dw-3 { display: flex; gap: 10px; align-items: flex-end; }
+.dw-3 label { flex: 1; } .dw-3 label:last-child { flex: 0 0 60px; }
+.dw-pt { display: grid; grid-template-columns: 64px 1fr 1.4fr; gap: 10px; align-items: end; margin-top: 6px; }
+.dw-pt-h { color: var(--text); padding-bottom: 6px; }
+#dwPts label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); min-width: 0; }
+#dwPts input, .dw-3 select { width: 100%; min-width: 0; box-sizing: border-box; }
 .al-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .al-last { margin: -4px 0 0; font-size: 12px; }
 #alertForm input, #alertForm select { background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 4px; font: inherit; }
