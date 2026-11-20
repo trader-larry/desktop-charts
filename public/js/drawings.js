@@ -18,6 +18,15 @@ export const SPECIAL_TOOLS = [
   { id: 'frvp', icon: 'vprange', title: 'Fixed range volume profile: drag across a time range', n: 2 },
 ];
 export const DRAW_COLORS = ['#2962ff', '#e0e3eb', '#26a69a', '#ef5350', '#f0b90b', '#ab47bc', '#ff9800', '#00bcd4'];
+// Drawings whose outline can be solid / dashed / dotted.
+export const STYLED_TYPES = ['trend', 'ray', 'hline', 'hray', 'vline', 'rect', 'circle'];
+export const LINE_STYLES = ['solid', 'dashed', 'dotted'];
+export const LINE_WIDTHS = [1, 2, 3, 4];
+export function dashFor(style, w = 1) {
+  if (style === 'dashed') return [4 + w * 3, 3 + w * 2];
+  if (style === 'dotted') return [w, Math.max(2, w * 2)];
+  return [];
+}
 const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 const FIB_COLORS = ['#787b86', '#f23645', '#ff9800', '#4caf50', '#089981', '#00bcd4', '#787b86'];
 
@@ -183,6 +192,7 @@ export class Drawings {
     const pos = this.local(e); if (!this.inPane(pos)) return;
     const h = this.hit(pos);
     if (h && h.d.type === 'text') { stop(e); const t = prompt('Text', h.d.text); if (t != null) this.updateSelected({ text: t }); }
+    else if (h && h.d.type !== 'frvp') { stop(e); if (this.sel !== h.d.id) this.select(h.d.id); this.onEdit?.(h.d); }
   }
   finishCreate() {
     const d = this.creating.d; this.creating = null;
@@ -224,6 +234,7 @@ class DrawPrimitive {
     const P = d.pts.map((p) => o.toXY(p));
     ctx.save();
     ctx.strokeStyle = d.color; ctx.fillStyle = d.color; ctx.lineWidth = d.width || 1;
+    if (STYLED_TYPES.includes(d.type)) ctx.setLineDash(dashFor(d.style, d.width || 1));
     const line = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
     switch (d.type) {
       case 'trend': if (P[0] && P[1]) line(P[0], P[1]); break;
@@ -276,6 +287,7 @@ class DrawPrimitive {
       } break;
     }
     if (selected && d.type !== 'frvp') {
+      ctx.setLineDash([]);
       for (const p of P) if (p) { ctx.beginPath(); ctx.fillStyle = '#131313'; ctx.strokeStyle = d.color; ctx.lineWidth = 1.5; ctx.arc(p.x, p.y, 4.5, 0, 7); ctx.fill(); ctx.stroke(); }
     }
     ctx.restore();

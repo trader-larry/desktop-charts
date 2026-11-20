@@ -8,6 +8,7 @@ export const TIMEFRAMES = [
   { id: '15m', sec: 900, dx: '15m', lookbackDays: 60 },
   { id: '30m', sec: 1800, dx: '30m', lookbackDays: 90 },
   { id: '1h', sec: 3600, dx: '1h', lookbackDays: 180 },
+  { id: '4h', sec: 14400, dx: '4h', lookbackDays: 365 },
   { id: 'D', sec: 86400, dx: '1d', lookbackDays: 365 * 6 },
   { id: 'W', sec: 604800, dx: '1w', lookbackDays: 365 * 20 },
 ];

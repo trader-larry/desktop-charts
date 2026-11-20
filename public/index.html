@@ -133,6 +133,21 @@
     </form>
     <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="alertOk">Create</button></div>
   </div>
+  <div id="drawModal" class="modal hidden narrow" role="dialog" aria-label="Drawing settings">
+    <div class="modal-head"><h2 id="drawTitle">Line settings</h2><button class="x" data-close>×</button></div>
+    <form id="drawForm" class="set-body">
+      <div class="dw-3">
+        <label id="dwStyleRow">Line style<select id="dwStyle"></select></label>
+        <label>Thickness<select id="dwWidth"></select></label>
+        <label>Colour<input id="dwColor" type="color" /></label>
+      </div>
+      <h3>Coordinates</h3>
+      <div id="dwPts"></div>
+      <p class="muted" id="dwTz"></p>
+      <button type="submit" hidden></button>
+    </form>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="drawOk">Save</button></div>
+  </div>
   <div id="ctxMenu" class="ctx-menu"></div>
 
   <div id="setModal" class="modal hidden narrow" role="dialog" aria-label="Settings">

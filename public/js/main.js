@@ -3,7 +3,7 @@ import { symbolKind } from './util.js';
 import { TIMEFRAMES, tfById, ICONS, hydrateIcons, $, $$, el, uid, fmtPrice, decimalsFor, fmtVol, TZ_CHOICES, fmtTick, fmtCrosshair, sessionKeyFn, parts } from './util.js';
 import { TastyFeed, DemoFeed } from './datafeed.js';
 import { INDICATORS, CATEGORIES, defaults } from './indicators.js';
-import { Drawings, DRAW_TOOLS, SPECIAL_TOOLS, DRAW_COLORS } from './drawings.js';
+import { Drawings, DRAW_TOOLS, SPECIAL_TOOLS, DRAW_COLORS, STYLED_TYPES, LINE_STYLES, LINE_WIDTHS, dashFor } from './drawings.js';
 
 // ===================== layouts =====================
 // Each layout is a list of chart rectangles [x, y, w, h] in fractions of the chart area.
@@ -253,6 +253,7 @@ class ChartPane {
     Object.assign(this.drawings, drawFlags);
     // New drawings stay on this chart; horizontal lines/rays show on every chart of the symbol.
     this.drawings.decorate = (d) => { if (!SHARED_BY_DEFAULT.includes(d.type)) d.pane = this.cfg.id; };
+    this.drawings.onEdit = (d) => openDrawingDialog(this, d);
     this.drawings.onTool = (t) => { if (this === active) { currentTool = t; paintTools(t); } };
 
     this.chart.subscribeCrosshairMove((p) => { this.hoverPrice = p.point && this.mainSeries ? this.mainSeries.coordinateToPrice(p.point.y) : null; this.updateLegendMain(p.time ?? null); syncCrosshair(this, p); });
@@ -605,7 +606,14 @@ class ChartPane {
     const shared = !d.pane;
     bar.append(el('button', { class: 'tb-btn small scope-btn' + (shared ? ' on' : ''), title: shared ? 'Showing on every chart of this symbol. Click to keep it on this chart only' : 'Showing on this chart only. Click to show it on every chart of this symbol',
       onclick: () => { dr.updateSelected({ pane: shared ? this.cfg.id : undefined }); this.renderDrawBar(dr.selected()); } }, shared ? 'All charts' : 'This chart'));
-    bar.append(el('button', { class: 'tb-btn small', title: 'Line width', onclick: () => { dr.updateSelected({ width: (d.width % 3) + 1 }); this.renderDrawBar(dr.selected()); } }, `${d.width || 1}px`));
+    const w = d.width || 1;
+    if (STYLED_TYPES.includes(d.type)) {
+      const st = d.style || 'solid', next = LINE_STYLES[(LINE_STYLES.indexOf(st) + 1) % LINE_STYLES.length];
+      bar.append(el('button', { class: 'tb-btn small', title: `Line style: ${st}. Click for ${next}`,
+        onclick: () => { dr.updateSelected({ style: next }); this.renderDrawBar(dr.selected()); } }, lineStyleSvg(st, Math.min(w, 2))));
+    }
+    bar.append(el('button', { class: 'tb-btn small', title: 'Line thickness (click to change)', onclick: () => { dr.updateSelected({ width: LINE_WIDTHS[(LINE_WIDTHS.indexOf(w) + 1) % LINE_WIDTHS.length] }); this.renderDrawBar(dr.selected()); } }, `${w}px`));
+    bar.append(el('button', { class: 'tb-btn icon-btn small', title: 'Settings: style, thickness and exact coordinates (or double-click the drawing)', onclick: () => openDrawingDialog(this, dr.selected()) }, `<span class="ic">${ICONS.gear}</span>`));
     if (d.type === 'text') bar.append(el('button', { class: 'tb-btn small', onclick: () => { const t = prompt('Text', d.text); if (t != null) dr.updateSelected({ text: t }); } }, 'Edit'));
     if (d.type === 'hline' || d.type === 'hray') {
       const linked = S.alerts.find((a) => a.drawingId === d.id && a.symbol === this.info.symbol);
@@ -617,6 +625,78 @@ class ChartPane {
     bar.classList.remove('hidden');
   }
 }
+
+// ===================== drawing settings dialog =====================
+// Line style / thickness / colour plus the exact price and time of each anchor point.
+function lineStyleSvg(style, w = 1) {
+  const dash = dashFor(style, w).join(' ');
+  return `<svg width="26" height="10" viewBox="0 0 26 10" style="display:block"><line x1="1" y1="5" x2="25" y2="5" stroke="currentColor" stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ''}/></svg>`;
+}
+// wall-clock "YYYY-MM-DD HH:MM" in the chart time zone <-> unix seconds
+function fmtWall(sec, tz, dateOnly) { const p = parts(sec, tz); return `${p.year}-${p.month}-${p.day}` + (dateOnly ? '' : ` ${p.hour}:${p.minute}`); }
+function parseWall(str, tz) {
+  const m = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?\s*$/.exec(str || ''); if (!m) return null;
+  const want = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) / 1000;
+  if (!isFinite(want)) return null;
+  const wall = (t) => { const p = parts(t, tz); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) / 1000; };
+  let t = want; for (let i = 0; i < 3; i++) t += want - wall(t); // converge across the zone offset / DST
+  return t;
+}
+const DRAW_NAMES = Object.fromEntries([...DRAW_TOOLS, ...SPECIAL_TOOLS].map((t) => [t.id, t.title.split(/[:(]/)[0].trim()]));
+let drawDlg = null; // { pane, id }
+function openDrawingDialog(pane, d) {
+  if (!d) return;
+  drawDlg = { pane, id: d.id };
+  const styled = STYLED_TYPES.includes(d.type), daily = pane.tf.sec >= 86400;
+  $('#drawTitle').textContent = `${DRAW_NAMES[d.type] || 'Drawing'} settings`;
+  $('#dwStyleRow').classList.toggle('hidden', !styled);
+  $('#dwStyle').innerHTML = LINE_STYLES.map((x) => `<option value="${x}">${x[0].toUpperCase() + x.slice(1)}</option>`).join('');
+  $('#dwStyle').value = d.style || 'solid';
+  $('#dwWidth').innerHTML = LINE_WIDTHS.map((x) => `<option value="${x}">${x}px</option>`).join('');
+  $('#dwWidth').value = String(d.width || 1);
+  $('#dwColor').value = /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#2962ff';
+  const box = $('#dwPts'); box.innerHTML = '';
+  const showP = d.type !== 'vline', showT = d.type !== 'hline';
+  const label = d.type === 'circle' ? ['Centre', 'Edge'] : d.pts.length > 1 ? ['Point 1', 'Point 2'] : ['Point'];
+  d.pts.forEach((p, i) => {
+    const row = el('div', { class: 'dw-pt' });
+    row.append(el('div', { class: 'dw-pt-h' }, label[i] || `Point ${i + 1}`));
+    if (showP) row.append(el('label', {}, `Price<input type="number" step="any" data-i="${i}" data-k="p" value="${roundPrice(p.p, pane.info.symbol)}" />`));
+    if (showT) row.append(el('label', {}, `${daily ? 'Date' : 'Date &amp; time'}<input type="text" spellcheck="false" autocomplete="off" data-i="${i}" data-k="t" placeholder="${daily ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:MM'}" value="${fmtWall(p.t, S.tz, daily)}" />`));
+    box.append(row);
+  });
+  const tzName = (TZ_CHOICES.find(([k]) => k === S.tz) || [null, S.tz])[1];
+  $('#dwTz').textContent = showT ? `Times are in the chart time zone: ${tzName}.` : '';
+  openModal('#drawModal');
+}
+function submitDrawingDialog() {
+  if (!drawDlg) return closeModals();
+  const { pane } = drawDlg; const dr = pane.drawings;
+  const d = dr.list.find((x) => x.id === drawDlg.id); if (!d) return closeModals();
+  const daily = pane.tf.sec >= 86400;
+  const pts = d.pts.map((p) => ({ ...p }));
+  for (const inp of $$('#dwPts input')) {
+    const i = +inp.dataset.i, k = inp.dataset.k;
+    if (k === 'p') {
+      const v = Number(inp.value); if (inp.value === '' || !isFinite(v)) { inp.focus(); return; }
+      if (roundPrice(pts[i].p, pane.info.symbol) !== v) pts[i].p = v; // untouched: keep the exact price
+    } else {
+      if (inp.value.trim() === fmtWall(pts[i].t, S.tz, daily)) continue; // untouched: keep the exact time
+      const t = parseWall(inp.value, S.tz); if (t == null) { inp.focus(); inp.select(); return; }
+      // on daily/weekly charts only the date is edited: keep the original time of day
+      pts[i].t = daily ? pts[i].t + Math.round((t - parseWall(fmtWall(pts[i].t, S.tz, true), S.tz)) / 86400) * 86400 : t;
+    }
+  }
+  const patch = { pts, width: Number($('#dwWidth').value) || 1 };
+  const col = $('#dwColor').value; if (col.toLowerCase() !== String(d.color).toLowerCase()) patch.color = col;
+  if (STYLED_TYPES.includes(d.type)) patch.style = $('#dwStyle').value;
+  if (dr.sel !== d.id) dr.select(d.id);
+  dr.updateSelected(patch);
+  pane.renderDrawBar(dr.selected());
+  closeModals();
+}
+$('#drawOk').addEventListener('click', submitDrawingDialog);
+$('#drawForm').addEventListener('submit', (e) => { e.preventDefault(); submitDrawingDialog(); });
 
 // ===================== layout management =====================
 function rebuildSymbol(sym) { for (const p of panes) if (p.info.symbol === sym) p.rebuildAll(); }
