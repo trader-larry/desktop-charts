@@ -1814,7 +1814,7 @@ async function checkUpdate() {
     if (!v.update || seen === v.latest) return;
     const note = $('#updateNote');
     note.replaceChildren(
-      el('a', { href: v.url, target: '_blank', rel: 'noopener', title: `You have ${v.current}. Download the new zip and unzip it over this folder; your config.json is kept.` }, ''),
+      el('a', { href: v.url, target: '_blank', rel: 'noopener', title: `You have ${v.current}. Open the release page for the download and update steps: close the app, unzip the download, and copy its files over this folder. Your config.json and layouts are kept.` }, ''),
       el('button', { title: 'Hide until the next version', 'aria-label': 'Dismiss update notice' }, '×'),
     );
     note.firstChild.textContent = `Update available: ${v.latest}`;
