@@ -46,10 +46,17 @@ That's the only thing to install; there are no npm packages.
 
 The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
 
-When a new version is out, the status bar at the bottom shows **Update available** with a link.
-To update, download the newest zip and unzip it over your folder. Your `config.json`
-(tastytrade login) is never in the zip, so it's kept. Your layouts, watchlists and drawings
-are stored in the browser, so they're kept too.
+When a new version is out, the status bar at the bottom shows **Update available** with a link
+to the release. The release page starts with these update steps:
+
+1. Download `desktop-charts-vX.Y.Z.zip` from the **Assets** list.
+2. Close the app if it's running (the chart window and the black server window).
+3. Unzip the download. Inside is a `desktop-charts` folder.
+4. Copy everything in it into your existing `desktop-charts` folder, replacing the files.
+5. Start the app again.
+
+Your `config.json` (tastytrade login) is never in the zip, so it's kept. Your layouts, watchlists,
+drawings and alerts are stored in the browser, so they're kept too.
 
 Optional: install the charts as an app (open http://localhost:8787 in a normal Chrome or Edge tab, then browser menu → Install). You get a Start-menu shortcut and dark title bars, and `start-windows.bat` then opens the installed app instead of a separate window.
 
@@ -149,6 +156,7 @@ git push origin v1.2.0
 
 The [Release workflow](.github/workflows/release.yml) zips the tagged files into
 `desktop-charts-v1.2.0.zip` and publishes it as a GitHub Release with
+the update steps from [`.github/release-notes.md`](.github/release-notes.md) followed by
 auto-generated notes, and adds a `VERSION` file that powers the update notice. Only committed files go in, so `config.json` (your tastytrade
 credentials), `.env` files and logs can't leak. Repo-only files (the screenshots in `docs/`)
 are left out by `export-ignore` lines in [.gitattributes](.gitattributes).
