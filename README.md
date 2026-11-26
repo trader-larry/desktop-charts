@@ -18,15 +18,37 @@ it never touches accounts, positions or orders. Without credentials it runs on g
 
 </details>
 
-## Run it
+## Download
 
-1. Install **Node.js 18 or newer** (LTS from https://nodejs.org). There are no npm packages to install.
-2. Get the code: `git clone https://github.com/trader-larry/desktop-charts.git` (or use **Code → Download ZIP** on GitHub and unzip it anywhere).
-3. Start it:
-   - Windows: double-click `start-windows.bat`
-   - Mac: double-click `start-mac.command` (first time: right-click → Open)
-   - Or in a terminal inside the folder: `node server.js`
-4. The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
+**[Download the latest version](https://github.com/trader-larry/desktop-charts/releases/latest)**,
+then pick the `desktop-charts-vX.Y.Z.zip` file under **Assets**. You don't need git or a GitHub account.
+
+You need **Node.js 18 or newer** first (the LTS version from [nodejs.org](https://nodejs.org)).
+That's the only thing to install; there are no npm packages.
+
+**Windows**
+1. Install Node.js from [nodejs.org](https://nodejs.org) (the LTS button) with the default options.
+2. Download the zip above, right-click it and choose **Extract All**.
+3. Open the `desktop-charts` folder and double-click `start-windows.bat`.
+   If Windows says "Windows protected your PC", click **More info → Run anyway**.
+
+**Mac**
+1. Install Node.js from [nodejs.org](https://nodejs.org) (the LTS button) and run the installer.
+2. Download the zip above and double-click it to unzip.
+3. Open the `desktop-charts` folder, right-click `start-mac.command` and choose **Open**, then
+   **Open** again. You only need to do this the first time; after that a double-click works.
+
+**Linux**
+1. Install Node.js 18 or newer (check with `node --version`).
+2. Download and unzip the zip above.
+3. In a terminal, `cd` into the `desktop-charts` folder and run `node server.js`, then open
+   http://localhost:8787.
+
+The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
+
+To update later, download the newest zip and unzip it over your folder. Your `config.json`
+(tastytrade login) is never in the zip, so it's kept. Your layouts, watchlists and drawings
+are stored in the browser, so they're kept too.
 
 Optional: install the charts as an app (open http://localhost:8787 in a normal Chrome or Edge tab, then browser menu → Install). You get a Start-menu shortcut and dark title bars, and `start-windows.bat` then opens the installed app instead of a separate window.
 
@@ -95,6 +117,31 @@ not true bid/ask order flow, which isn't available from candle data. The chart l
 - `public/js/profile.js` — volume profile / TPO math and drawing
 - `public/js/drawings.js` — drawing tools
 - `public/vendor/lightweight-charts.mjs` — Lightweight Charts 5.2.1 (Apache 2.0, see LICENSE file next to it)
+
+## For developers
+
+To work on the code, clone the repository instead of downloading a release:
+
+```
+git clone https://github.com/trader-larry/desktop-charts.git
+cd desktop-charts
+node server.js
+```
+
+There are no npm packages to install; Lightweight Charts is bundled in `public/vendor/`.
+
+**Cutting a release.** Push a version tag and GitHub builds the download for you:
+
+```
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+The [Release workflow](.github/workflows/release.yml) zips the tagged files into
+`desktop-charts-v1.2.0.zip` and publishes it as a GitHub Release with
+auto-generated notes. Only committed files go in, so `config.json` (your tastytrade
+credentials), `.env` files and logs can't leak. Repo-only files (the screenshots in `docs/`)
+are left out by `export-ignore` lines in [.gitattributes](.gitattributes).
 
 ## License
 
