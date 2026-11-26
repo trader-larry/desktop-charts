@@ -1804,5 +1804,25 @@ async function boot() {
   if (WIN === 'main') reopenWindows();
   refreshQuoteSubs();
 }
+// Update notice: "Update available" in the status bar, once per new version,
+// until the person dismisses it. Nothing is downloaded by itself.
+async function checkUpdate() {
+  try {
+    const v = await fetch('/api/version').then((r) => r.json());
+    const seenKey = 'charts.updateSeen';
+    let seen = null; try { seen = localStorage.getItem(seenKey); } catch {}
+    if (!v.update || seen === v.latest) return;
+    const note = $('#updateNote');
+    note.replaceChildren(
+      el('a', { href: v.url, target: '_blank', rel: 'noopener', title: `You have ${v.current}. Download the new zip and unzip it over this folder; your config.json is kept.` }, ''),
+      el('button', { title: 'Hide until the next version', 'aria-label': 'Dismiss update notice' }, '×'),
+    );
+    note.firstChild.textContent = `Update available: ${v.latest}`;
+    note.lastChild.onclick = () => { try { localStorage.setItem(seenKey, v.latest); } catch {} note.classList.add('hidden'); };
+    note.classList.remove('hidden');
+  } catch { /* offline: show nothing */ }
+}
+
 boot();
+checkUpdate();
 window.__charts = { WIN, newWindow, saveNow, openWins, chartImage, checkAlerts, openAlertDialog, get quotes() { return quotes; }, get panes() { return panes; }, get active() { return active; }, applyLayout, setActive, S, LAYOUTS };

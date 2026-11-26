@@ -34,7 +34,7 @@ jobs:
           # gitignored files (config.json with tastytrade credentials, .env,
           # logs, node_modules) can never end up in the download. The
           # executable bit on start-mac.command is kept.
-          # VERSION records which release the download came from.
+          # VERSION lets the app tell users when a newer release is out.
           git archive --format=zip --prefix="${APP_NAME}/" \
             --add-virtual-file="${APP_NAME}/VERSION:${GITHUB_REF_NAME}" \
             -o "$ZIP" "$GITHUB_REF_NAME"

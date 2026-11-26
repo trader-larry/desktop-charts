@@ -46,7 +46,8 @@ That's the only thing to install; there are no npm packages.
 
 The charts open at **http://localhost:8787** in their own Chrome or Edge app window (no tabs or address bar), which remembers its size and position. If neither browser is installed, your default browser opens instead. To always use a normal tab, set `APPWINDOW=0` near the top of the start script. Leave the black server window open while you chart.
 
-To update later, download the newest zip and unzip it over your folder. Your `config.json`
+When a new version is out, the status bar at the bottom shows **Update available** with a link.
+To update, download the newest zip and unzip it over your folder. Your `config.json`
 (tastytrade login) is never in the zip, so it's kept. Your layouts, watchlists and drawings
 are stored in the browser, so they're kept too.
 
@@ -109,6 +110,15 @@ symbol, timeframe and indicators, the watchlist and settings are saved in your b
 **Buy/sell split in volume profiles is an estimate** from each bar's shape (where it closed within its range),
 not true bid/ask order flow, which isn't available from candle data. The chart labels it "≈ buy/sell from bars".
 
+## Update notice
+
+A downloaded copy checks GitHub once every 12 hours for a newer release and, if
+there is one, shows **Update available** in the status bar with a link to it. The ×
+next to it hides it until the next version. The check only reads the public release
+number from GitHub; nothing about you or your tastytrade login is sent. It never
+downloads or installs anything by itself. Turn it off with `node server.js --no-update-check`
+(or set `CHARTS_NO_UPDATE_CHECK=1`). Copies made with git clone don't check: use `git pull`.
+
 ## Files
 
 - `server.js` — tiny local web server + tastytrade REST (OAuth token, quote token, symbol lookup)
@@ -139,7 +149,7 @@ git push origin v1.2.0
 
 The [Release workflow](.github/workflows/release.yml) zips the tagged files into
 `desktop-charts-v1.2.0.zip` and publishes it as a GitHub Release with
-auto-generated notes. Only committed files go in, so `config.json` (your tastytrade
+auto-generated notes, and adds a `VERSION` file that powers the update notice. Only committed files go in, so `config.json` (your tastytrade
 credentials), `.env` files and logs can't leak. Repo-only files (the screenshots in `docs/`)
 are left out by `export-ignore` lines in [.gitattributes](.gitattributes).
 

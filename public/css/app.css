@@ -175,6 +175,12 @@ input[type=color] { padding: 0; width: 36px; height: 26px; }
 #paramDD .dd-item { color: var(--text); white-space: nowrap; }
 #paramDD .btn { color: var(--text); }
 .credit { color: var(--dim); text-decoration: none; font-size: 11px; margin-right: 6px; }
+#updateNote { display: inline-flex; align-items: center; gap: 4px; }
+#updateNote.hidden { display: none; }
+#updateNote a { color: var(--warn); text-decoration: none; font-weight: 600; }
+#updateNote a:hover { text-decoration: underline; }
+#updateNote button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+#updateNote button:hover { color: var(--text); }
 .credit:hover { color: var(--muted); text-decoration: underline; }
 
 /* saved layouts */

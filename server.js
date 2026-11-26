@@ -153,6 +153,67 @@ function sameOrigin(req) {
   return !origin || origin === `http://${host}`;
 }
 
+// ---------------------------------------------------------------------------
+// Update notice
+// ---------------------------------------------------------------------------
+// A release zip contains a VERSION file (written by .github/workflows/release.yml).
+// The page asks /api/version, which compares it with the newest GitHub release and
+// shows "Update available" in the status bar. It only reads the public release
+// number; nothing about you (and nothing from config.json) is sent. A git clone has
+// no VERSION file and skips the check. Turn it off with --no-update-check or
+// CHARTS_NO_UPDATE_CHECK=1.
+const UPDATE_REPO = 'trader-larry/desktop-charts';
+const UPDATE_CHECK = !process.argv.includes('--no-update-check')
+  && !/^(1|true|yes|on)$/i.test(process.env.CHARTS_NO_UPDATE_CHECK || '');
+const UPDATE_CHECK_MS = 12 * 3600 * 1000;
+let update = { at: 0, latest: null, url: null, pending: null };
+
+function currentVersion() {
+  try { return fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim() || null; } catch { return null; }
+}
+// 'v1.10.2' -> [1, 10, 2]. Anything that isn't a plain number counts as 0.
+function versionKey(v) {
+  const parts = String(v).trim().replace(/^v/i, '').split('-')[0].split('.').map((x) => (/^\d+$/.test(x) ? Number(x) : 0));
+  while (parts.length < 3) parts.push(0);
+  return parts;
+}
+function isNewer(a, b) {
+  const x = versionKey(a), y = versionKey(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+// Newest published release on GitHub, asked at most every 12 hours (also after a
+// failure, so an offline computer isn't retried on every page load).
+async function latestRelease() {
+  if (Date.now() - update.at < UPDATE_CHECK_MS) return update;
+  if (!update.pending) {
+    update.at = Date.now();
+    update.pending = (async () => {
+      try {
+        const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'desktop-charts-update-check' },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (r.ok) {
+          const rel = await r.json();
+          update.latest = String(rel.tag_name || '').trim() || null;
+          update.url = rel.html_url || `https://github.com/${UPDATE_REPO}/releases/latest`;
+        }
+      } catch { /* offline, rate-limited or no release yet: just show nothing */ }
+      update.pending = null;
+    })();
+  }
+  await update.pending;
+  return update;
+}
+async function versionInfo() {
+  const current = currentVersion();
+  const out = { current, latest: null, url: null, update: false };
+  if (!current || !UPDATE_CHECK) return out;
+  const { latest, url } = await latestRelease();
+  return { ...out, latest, url, update: !!latest && isNewer(latest, current) };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
@@ -167,6 +228,7 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, { mode: configured && !lastError ? 'live' : 'demo', configured, forcedDemo: FORCE_DEMO, level, error: lastError });
     }
+    if (p === '/api/version') return send(res, 200, await versionInfo());
     if (p === '/api/quote-token') {
       if (!isConfigured()) return send(res, 400, { error: 'not configured' });
       return send(res, 200, await getQuoteToken(url.searchParams.has('refresh')));
@@ -209,7 +271,8 @@ const server = http.createServer(async (req, res) => {
 
 const PORT = Number(process.env.PORT) || loadConfig().port || 8787;
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  Charts running at  http://localhost:${PORT}\n`);
+  const ver = currentVersion();
+  console.log(`\n  Charts ${ver ? ver + ' ' : ''}running at  http://localhost:${PORT}\n`);
   console.log(isConfigured() ? '  Data: tastytrade (DXLink)\n' : '  Data: DEMO (no tastytrade credentials in config.json yet; add them in the app under Settings)\n');
   console.log('  Keep this window open while you chart.');
   console.log('  To stop the app: close this window, or press Ctrl+C here (answer Y if asked "Terminate batch job").\n');
